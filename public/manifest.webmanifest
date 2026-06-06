@@ -1,0 +1,19 @@
+{
+  "name": "WS CONSULTORIA - SISTEMA DE GESTAO COMERCIAL",
+  "short_name": "WS CONSULTORIA",
+  "description": "SISTEMA DE GESTAO COMERCIAL DA WS CONSULTORIA",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#080d13",
+  "theme_color": "#080d13",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/assets/ws-logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

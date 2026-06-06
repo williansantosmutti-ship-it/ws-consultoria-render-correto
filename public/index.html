@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sistema de Gestão Comercial</title>
+    <link rel="icon" href="/assets/ws-logo.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#080d13">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Sistema Comercial">
+    <link rel="apple-touch-icon" href="/assets/ws-logo.png">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main id="login" class="login-screen">
+      <section class="login-panel">
+        <div class="login-logo"><img src="/assets/ws-logo.png" alt="WS CONSULTORIA"></div>
+        <h1>Sistema de Gestão Comercial</h1>
+        <form id="loginForm" class="stack">
+          <label>Email<input name="email" type="email" autocomplete="username" placeholder="seu@email.com" required autofocus></label>
+          <label>Senha<input name="password" type="password" autocomplete="current-password" required></label>
+          <button class="primary" type="submit">Entrar no painel</button>
+          <span id="loginMessage" class="message"></span>
+        </form>
+      </section>
+    </main>
+
+    <div id="app" class="app hidden">
+      <aside class="sidebar">
+        <div class="brand">
+          <div id="logoSlot" class="brand-mark">WS</div>
+          <div>
+            <strong>WS CONSULTORIA</strong>
+            <small>Painel de gestão</small>
+          </div>
+        </div>
+        <nav id="nav"></nav>
+        <button id="logoutBtn" class="ghost">Sair</button>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <small id="todayLabel"></small>
+            <h2 id="pageTitle">Dashboard</h2>
+          </div>
+          <div class="top-actions">
+            <button id="themeBtn" class="secondary" type="button">Modo escuro</button>
+            <button id="exportBtn" class="secondary">Copiar backup</button>
+            <button id="printBtn" class="secondary">Imprimir relatório</button>
+          </div>
+        </header>
+
+        <section id="alerts" class="alerts"></section>
+        <section id="content"></section>
+      </section>
+    </div>
+
+    <template id="modalTemplate">
+      <div class="modal-backdrop">
+        <form class="modal">
+          <header>
+            <h3></h3>
+            <button type="button" class="icon close">x</button>
+          </header>
+          <div class="modal-body"></div>
+          <footer>
+            <button type="button" class="secondary close">Cancelar</button>
+            <button class="primary" type="submit">Salvar</button>
+          </footer>
+        </form>
+      </div>
+    </template>
+
+    <script src="/vendor/jszip.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

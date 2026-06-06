@@ -1,0 +1,26 @@
+﻿ANTES DE SUBIR PARA O GITHUB, CONFIRA SE A PASTA TEM EXATAMENTE ISTO:
+
+server.js
+package.json
+README.md
+GUIA-ONLINE-SEGURO.md
+.env.example
+public\index.html
+public\app.js
+public\styles.css
+public\service-worker.js
+public\manifest.webmanifest
+public\map-layers.json
+public\assets\use-logo.gif
+public\assets\ws-logo.png
+public\assets\ws-logo.ico
+public\vendor\jszip.min.js
+data\store.json
+
+NAO PODE TER:
+servidor.js
+indexhtml
+estilos.css
+store.json na raiz
+jszipmin.js na raiz
+manifesto.webmanifesto
