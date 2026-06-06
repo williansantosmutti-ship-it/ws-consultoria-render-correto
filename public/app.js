@@ -9,6 +9,7 @@ const state = {
   navOpen: new Set(),
   dashboardFilter: "resumo",
   reportFilter: "geral",
+  reportOptions: {},
   scheduleView: "week",
   calendarDate: new Date(),
   remindersOpen: false,
@@ -55,6 +56,7 @@ const menu = [
     label: "Administração",
     items: [
       ["reports", "Relatórios"],
+      ["backup", "Backup"],
       ["logs", "Histórico"],
       ["users", "Acessos"],
       ["settings", "Empresa"]
@@ -88,8 +90,6 @@ async function boot() {
   $("#loginForm").addEventListener("submit", login);
   $("#logoutBtn").addEventListener("click", logout);
   $("#themeBtn").addEventListener("click", toggleTheme);
-  $("#exportBtn").addEventListener("click", backupData);
-  $("#printBtn").addEventListener("click", printExecutiveReport);
   $("#reminderBtn").addEventListener("click", toggleReminderDrawer);
   try {
     const session = await request("/api/me");
@@ -192,7 +192,7 @@ function render() {
   applyTheme();
   renderReminderBadge();
   renderReminderDrawer();
-  const views = { dashboard, agenda, condos, weeklySchedules, coverageMap, visits, expansions, sellers, sales, plans, reports, logs, users, settings };
+  const views = { dashboard, agenda, condos, weeklySchedules, coverageMap, visits, expansions, sellers, sales, plans, reports, backup, logs, users, settings };
   $("#content").innerHTML = views[state.page]();
   bindPageEvents();
 }
@@ -207,14 +207,23 @@ function goToPage(page) {
 function applyTheme() {
   const theme = localStorage.getItem("ws-theme") || state.settings.theme || "dark";
   document.body.dataset.theme = theme;
-  $("#themeBtn").textContent = theme === "dark" ? "Modo claro" : "Modo escuro";
+  updateThemeButton(theme);
 }
 
 function toggleTheme() {
   const next = (document.body.dataset.theme || "dark") === "dark" ? "light" : "dark";
   localStorage.setItem("ws-theme", next);
   document.body.dataset.theme = next;
-  $("#themeBtn").textContent = next === "dark" ? "Modo claro" : "Modo escuro";
+  updateThemeButton(next);
+}
+
+function updateThemeButton(theme) {
+  const button = $("#themeBtn");
+  if (!button) return;
+  const nextLabel = theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro";
+  button.textContent = theme === "dark" ? "\u2600" : "\u{1F319}";
+  button.title = nextLabel;
+  button.setAttribute("aria-label", nextLabel);
 }
 
 function renderLogo() {
@@ -706,22 +715,73 @@ function plans() {
 }
 
 function reports() {
+  const filter = state.reportFilter;
+  const selected = selectedReportOptions(filter);
   return `
-    <section class="card">
-      <div class="section-head">
-        <h3>Relatórios por atividade</h3>
+    <section class="card report-builder">
+      <div class="section-head report-builder-head">
+        <div>
+          <h3>Montar relatório</h3>
+          <p class="hint">Escolha a área e marque somente as informações que devem sair no documento.</p>
+        </div>
         <div class="toolbar">
-          <select data-report-filter>
-            ${["geral", "vendas", "visitas", "expansao", "planos"].map((item) => `<option value="${item}" ${state.reportFilter === item ? "selected" : ""}>${reportLabel(item)}</option>`).join("")}
-          </select>
           <button class="secondary" data-copy-report>Copiar resumo</button>
-          <button class="secondary" data-download-report>Baixar TXT</button>
+          <button class="secondary" data-download-report>TXT</button>
           <button class="secondary" data-download-report-excel>Excel</button>
           <button class="secondary" data-download-report-pdf>PDF / Imprimir</button>
         </div>
       </div>
-      ${reportCards()}
-      ${reportPreview()}
+      <div class="report-area-grid">
+        ${reportAreas().map((area) => reportAreaButton(area, filter)).join("")}
+      </div>
+      <div class="report-options-box">
+        <div>
+          <strong>Informações do relatório</strong>
+          <small>O PDF/Excel será gerado com base nesta seleção.</small>
+        </div>
+        <div class="report-option-grid">
+          ${reportOptionList(filter).map((option) => reportOptionCard(option, selected.has(option.key))).join("")}
+        </div>
+      </div>
+    </section>
+    ${reportPreview()}`;
+}
+
+function backup() {
+  const content = JSON.stringify(state.data, null, 2);
+  const sizeKb = Math.max(1, Math.round(new Blob([content]).size / 1024));
+  const collections = [
+    ["Condomínios", state.data.condos.length],
+    ["Relacionamentos", state.data.visits.length],
+    ["Programações", state.data.weeklySchedules.length],
+    ["Vendas", state.data.sales.length],
+    ["Expansões", state.data.expansions.length],
+    ["Planos", state.data.plans.length],
+    ["Usuários", state.data.users.length],
+    ["Histórico", state.data.activities.length]
+  ];
+  return `
+    <div class="grid cols-4">
+      ${metric("Tamanho estimado", `${sizeKb} KB`)}
+      ${metric("Bases incluídas", collections.length)}
+      ${metric("Registros totais", collections.reduce((sum, row) => sum + Number(row[1] || 0), 0))}
+      ${metric("Última geração", fmtDateTime(new Date().toISOString()))}
+    </div>
+    <section class="card backup-panel">
+      <div class="section-head">
+        <div>
+          <h3>Backup completo do sistema</h3>
+          <p class="hint">Exporta todos os cadastros, vendas, programações, relacionamento, usuários, configurações e histórico.</p>
+        </div>
+        <div class="toolbar">
+          <button class="secondary" data-copy-backup>Copiar backup</button>
+          <button class="primary" data-download-backup>Baixar JSON</button>
+        </div>
+      </div>
+      <div class="backup-summary">
+        ${collections.map(([label, value]) => `<span><strong>${value}</strong>${escapeHtml(label)}</span>`).join("")}
+      </div>
+      <p class="backup-note">Guarde o arquivo em local seguro. Ele contém dados operacionais e acessos do sistema.</p>
     </section>`;
 }
 
@@ -1000,10 +1060,20 @@ function bindPageEvents() {
     state.reportFilter = event.target.value;
     render();
   });
+  document.querySelectorAll("[data-report-area]").forEach((button) => button.addEventListener("click", () => {
+    state.reportFilter = button.dataset.reportArea;
+    render();
+  }));
+  document.querySelectorAll("[data-report-option]").forEach((input) => input.addEventListener("change", () => {
+    setReportOption(state.reportFilter, input.dataset.reportOption, input.checked);
+    render();
+  }));
   $("[data-copy-report]")?.addEventListener("click", () => navigator.clipboard.writeText(buildReport()));
   $("[data-download-report]")?.addEventListener("click", downloadReport);
   $("[data-download-report-pdf]")?.addEventListener("click", printExecutiveReport);
   $("[data-download-report-excel]")?.addEventListener("click", downloadReportExcel);
+  $("[data-copy-backup]")?.addEventListener("click", backupData);
+  $("[data-download-backup]")?.addEventListener("click", downloadBackup);
   $("[data-copy-logs]")?.addEventListener("click", copyLogs);
   $("[data-copy-schedule]")?.addEventListener("click", copyWeeklySchedule);
   $("[data-download-schedule]")?.addEventListener("click", downloadWeeklySchedule);
@@ -1695,6 +1765,11 @@ function backupData() {
     .catch(() => download(new Blob([content], { type: "application/json" }), `backup-ws-consultoria-${todayISO()}.json`));
 }
 
+function downloadBackup() {
+  const content = JSON.stringify(state.data, null, 2);
+  download(new Blob([content], { type: "application/json;charset=utf-8" }), `backup-ws-consultoria-${todayISO()}.json`);
+}
+
 function downloadReport() {
   download(new Blob([buildReport()], { type: "text/plain;charset=utf-8" }), `relatorio-ws-${todayISO()}.txt`);
 }
@@ -1738,8 +1813,100 @@ function reportPrintStyles() {
   </style>`;
 }
 
+function reportAreas() {
+  return [
+    ["geral", "Geral", "Visão executiva com os principais indicadores."],
+    ["vendas", "Vendas", "Produção comercial, ranking e vendas recentes."],
+    ["visitas", "Relacionamento", "Síndicos, administradoras, cupons e retornos."],
+    ["programacao", "Programação", "Roteiros semanais e atuação da equipe."],
+    ["expansao", "Expansão", "Vistorias, inspeções e implantações."],
+    ["condominios", "Condomínios", "Cadastro mestre, status e prioridades."],
+    ["planos", "Planos", "Planos ativos, valores e velocidades."]
+  ];
+}
+
+function reportAreaButton(area, active) {
+  const [id, label, description] = area;
+  return `<button class="report-area-btn ${active === id ? "active" : ""}" type="button" data-report-area="${id}">
+    <strong>${escapeHtml(label)}</strong>
+    <small>${escapeHtml(description)}</small>
+  </button>`;
+}
+
+function reportOptionList(filter = state.reportFilter) {
+  const commonMetrics = { key: "metrics", label: "Indicadores", description: "Cards principais do módulo escolhido." };
+  const map = {
+    geral: [
+      commonMetrics,
+      { key: "salesRanking", label: "Ranking comercial", description: "Vendedores com vendas e receita no mês." },
+      { key: "relationships", label: "Relacionamento", description: "Condomínios que precisam de retorno." },
+      { key: "expansion", label: "Expansão", description: "Demandas abertas e próximas etapas." },
+      { key: "plans", label: "Planos", description: "Planos ativos mais relevantes." }
+    ],
+    vendas: [
+      commonMetrics,
+      { key: "salesRanking", label: "Ranking comercial", description: "Ranking automático por vendedor." },
+      { key: "latestSales", label: "Vendas recentes", description: "Últimos lançamentos com status e valor." },
+      { key: "salesStatus", label: "Status das vendas", description: "Resumo por situação comercial." }
+    ],
+    visitas: [
+      commonMetrics,
+      { key: "relationships", label: "Relacionamento prioritário", description: "Retornos, status e qualidade da relação." },
+      { key: "upcomingVisits", label: "Próximas visitas", description: "Agenda futura de relacionamento." },
+      { key: "condoPriorities", label: "Condomínios sem visita", description: "Locais que ficaram muito tempo sem passagem." }
+    ],
+    programacao: [
+      commonMetrics,
+      { key: "scheduleByDay", label: "Roteiro por dia", description: "Programações agrupadas por data." },
+      { key: "scheduleConsultants", label: "Consultores na rota", description: "Distribuição da equipe por programação." }
+    ],
+    expansao: [
+      commonMetrics,
+      { key: "expansion", label: "Demandas abertas", description: "Vistorias, inspeções e implantações pendentes." },
+      { key: "expansionStatus", label: "Resumo por status", description: "Quantidade por estágio da demanda." }
+    ],
+    condominios: [
+      commonMetrics,
+      { key: "condoMaster", label: "Cadastro mestre", description: "Condomínios com cidade, bairro e status." },
+      { key: "condoPriorities", label: "Sem visita recente", description: "Locais que exigem planejamento de retorno." }
+    ],
+    planos: [
+      commonMetrics,
+      { key: "plans", label: "Planos ativos", description: "Planos comercializados e valores." },
+      { key: "plansByCity", label: "Planos por cidade", description: "Resumo de oferta por localidade." }
+    ]
+  };
+  return map[filter] || map.geral;
+}
+
+function selectedReportOptions(filter = state.reportFilter) {
+  const list = reportOptionList(filter);
+  const defaults = list.map((option) => option.key);
+  const hasSaved = Object.prototype.hasOwnProperty.call(state.reportOptions, filter);
+  const values = hasSaved && Array.isArray(state.reportOptions[filter]) ? state.reportOptions[filter] : defaults;
+  return new Set(values.filter((key) => list.some((option) => option.key === key)));
+}
+
+function setReportOption(filter, key, checked) {
+  const selected = selectedReportOptions(filter);
+  checked ? selected.add(key) : selected.delete(key);
+  state.reportOptions = { ...state.reportOptions, [filter]: [...selected] };
+}
+
+function reportOptionCard(option, checked) {
+  return `<label class="report-option-card">
+    <input type="checkbox" data-report-option="${option.key}" ${checked ? "checked" : ""}>
+    <span>
+      <strong>${escapeHtml(option.label)}</strong>
+      <small>${escapeHtml(option.description)}</small>
+    </span>
+  </label>`;
+}
+
 function reportDocumentHtml(filter = state.reportFilter) {
   const logo = reportLogoSrc();
+  const selected = selectedReportOptions(filter);
+  const sections = reportEssentialSections(filter);
   return `<main class="report-page">
     <header class="report-head">
       <img class="report-logo" src="${escapeHtml(logo)}" alt="Logo">
@@ -1753,8 +1920,8 @@ function reportDocumentHtml(filter = state.reportFilter) {
         Responsável: ${escapeHtml(state.user?.name || "-")}
       </div>
     </header>
-    ${reportEssentialMetrics()}
-    <div class="report-grid">${reportEssentialSections(filter)}</div>
+    ${selected.has("metrics") ? reportEssentialMetrics(filter) : ""}
+    <div class="report-grid">${sections || reportSection("Seleção vazia", ["Orientação"], [["Marque ao menos uma informação para compor este relatório."]])}</div>
     <p class="notes">Documento gerado somente com indicadores e registros essenciais para acompanhamento gerencial.</p>
   </main>`;
 }
@@ -1764,7 +1931,7 @@ function reportLogoSrc() {
 }
 
 function reportPreview() {
-  return `<div class="report-preview">${reportDocumentHtml()}</div>`;
+  return `<div class="report-preview">${reportDocumentHtml(state.reportFilter)}</div>`;
 }
 
 function activeReportFilter() {
@@ -1774,26 +1941,78 @@ function activeReportFilter() {
     sales: "vendas",
     sellers: "vendas",
     visits: "visitas",
-    weeklySchedules: "visitas",
+    weeklySchedules: "programacao",
     agenda: "visitas",
     expansions: "expansao",
     plans: "planos",
-    condos: "visitas",
+    condos: "condominios",
     coverageMap: "visitas"
   }[state.page] || "geral";
 }
 
-function reportEssentialMetrics() {
+function reportMetricRows(filter = state.reportFilter) {
   const month = new Date().toISOString().slice(0, 7);
   const salesMonth = state.data.sales.filter((sale) => String(sale.date || "").startsWith(month));
   const revenue = salesMonth.reduce((sum, sale) => sum + Number(sale.value || 0), 0);
   const openVisits = state.data.visits.filter((visit) => !["Finalizado", "Visitado", "Concluida", "Concluída"].includes(visit.status)).length;
   const openExpansions = state.data.expansions.filter((item) => !["Concluído", "Reprovado"].includes(item.status)).length;
+  const latest = latestVisitByCondo();
+  const stale30 = state.data.condos.filter((condo) => daysSince(latest.get(condo.id)?.date) > 30).length;
+  const weekRows = state.data.weeklySchedules.filter((item) => String(item.date || "").slice(0, 10) >= todayISO());
+  const weekSellerIds = weekRows.flatMap((item) => Array.isArray(item.sellerIds) && item.sellerIds.length ? item.sellerIds : [item.sellerId].filter(Boolean));
+  const activePlans = state.data.plans.filter((plan) => plan.status !== "Inativo");
+  const activeCondos = state.data.condos.filter((condo) => condo.status !== "Inativo");
+  const metricMap = {
+    vendas: [
+      ["Vendas no mês", salesMonth.length],
+      ["Receita do mês", money(revenue)],
+      ["Ticket médio", money(salesMonth.length ? revenue / salesMonth.length : 0)],
+      ["Meta de vendas", state.data.sellers.reduce((sum, seller) => sum + Number(seller.goal || 0), 0)]
+    ],
+    visitas: [
+      ["Relacionamentos", state.data.visits.length],
+      ["Abertos", openVisits],
+      ["Cupons entregues", state.data.visits.filter((visit) => visit.couponDelivered === "Sim" || visit.couponCode).length],
+      ["Sem visita > 30 dias", stale30]
+    ],
+    programacao: [
+      ["Rotas futuras", weekRows.length],
+      ["Condomínios na rota", new Set(weekRows.map((item) => item.condoId).filter(Boolean)).size],
+      ["Consultores envolvidos", new Set(weekSellerIds).size],
+      ["Atuações externas", weekRows.filter((item) => item.accessMode === "Ficar externo").length]
+    ],
+    expansao: [
+      ["Demandas", state.data.expansions.length],
+      ["Abertas", openExpansions],
+      ["Aprovadas", state.data.expansions.filter((item) => item.status === "Aprovado").length],
+      ["Concluídas", state.data.expansions.filter((item) => item.status === "Concluído").length]
+    ],
+    condominios: [
+      ["Condomínios", state.data.condos.length],
+      ["Ativos", activeCondos.length],
+      ["Cidades", new Set(state.data.condos.map((condo) => condo.city).filter(Boolean)).size],
+      ["Unidades", state.data.condos.reduce((sum, condo) => sum + Number(condo.capacity || 0), 0)]
+    ],
+    planos: [
+      ["Planos ativos", activePlans.length],
+      ["Promocionais", state.data.plans.filter((plan) => plan.status === "Promocional").length],
+      ["Valor médio", money(activePlans.length ? activePlans.reduce((sum, plan) => sum + Number(plan.price || 0), 0) / activePlans.length : 0)],
+      ["Cidades atendidas", new Set(activePlans.map((plan) => plan.city).filter(Boolean)).size]
+    ],
+    geral: [
+      ["Vendas no mês", salesMonth.length],
+      ["Receita do mês", money(revenue)],
+      ["Relacionamentos abertos", openVisits],
+      ["Expansões abertas", openExpansions]
+    ]
+  };
+  return metricMap[filter] || metricMap.geral;
+}
+
+function reportEssentialMetrics(filter = state.reportFilter) {
+  const metrics = reportMetricRows(filter);
   return `<section class="metrics">
-    ${reportMetric("Vendas no mês", salesMonth.length)}
-    ${reportMetric("Receita do mês", money(revenue))}
-    ${reportMetric("Relacionamentos abertos", openVisits)}
-    ${reportMetric("Expansões abertas", openExpansions)}
+    ${metrics.map(([label, value]) => reportMetric(label, value)).join("")}
   </section>`;
 }
 
@@ -1802,17 +2021,47 @@ function reportMetric(label, value) {
 }
 
 function reportEssentialSections(filter = state.reportFilter) {
+  const selected = selectedReportOptions(filter);
   const sections = [];
-  if (filter === "geral" || filter === "vendas") sections.push(reportSalesSection());
-  if (filter === "geral" || filter === "visitas") sections.push(reportRelationshipSection());
-  if (filter === "geral" || filter === "expansao") sections.push(reportExpansionSection());
-  if (filter === "geral" || filter === "planos") sections.push(reportPlansSection());
-  return sections.slice(0, filter === "geral" ? 4 : 2).join("");
+  if (selected.has("salesRanking")) sections.push(reportSalesSection());
+  if (selected.has("latestSales")) sections.push(reportLatestSalesSection());
+  if (selected.has("salesStatus")) sections.push(reportSalesStatusSection());
+  if (selected.has("relationships")) sections.push(reportRelationshipSection());
+  if (selected.has("upcomingVisits")) sections.push(reportUpcomingVisitsSection());
+  if (selected.has("condoPriorities")) sections.push(reportCondoPrioritySection());
+  if (selected.has("scheduleByDay")) sections.push(reportScheduleByDaySection());
+  if (selected.has("scheduleConsultants")) sections.push(reportScheduleConsultantsSection());
+  if (selected.has("expansion")) sections.push(reportExpansionSection());
+  if (selected.has("expansionStatus")) sections.push(reportExpansionStatusSection());
+  if (selected.has("condoMaster")) sections.push(reportCondoMasterSection());
+  if (selected.has("plans")) sections.push(reportPlansSection());
+  if (selected.has("plansByCity")) sections.push(reportPlansByCitySection());
+  return sections.join("");
 }
 
 function reportSalesSection() {
   const ranking = sellerRanking().slice(0, 8);
   return reportSection("Ranking comercial", ["Vendedor", "Vendas", "Receita", "Conversão"], ranking.map((row) => [row.name, row.count, money(row.value), `${row.conversion}%`]));
+}
+
+function reportLatestSalesSection() {
+  const rows = [...state.data.sales]
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+    .slice(0, 12)
+    .map((sale) => [
+      fmtDate(sale.date),
+      findById("sellers", sale.sellerId)?.name || "-",
+      sale.customer || "-",
+      findById("condos", sale.condoId)?.name || sale.condoName || "-",
+      findById("plans", sale.planId)?.name || sale.planName || "-",
+      money(sale.value),
+      sale.status || "Confirmada"
+    ]);
+  return reportSection("Vendas recentes", ["Data", "Vendedor", "Cliente", "Condomínio", "Plano", "Valor", "Status"], rows);
+}
+
+function reportSalesStatusSection() {
+  return reportSection("Vendas por status", ["Status", "Quantidade"], counts(state.data.sales, "status").map((row) => [row.label, row.value]));
 }
 
 function reportRelationshipSection() {
@@ -1824,12 +2073,67 @@ function reportRelationshipSection() {
   return reportSection("Relacionamento prioritário", ["Condomínio", "Status", "Relação", "Próxima visita"], rows);
 }
 
+function reportUpcomingVisitsSection() {
+  const rows = upcomingEvents()
+    .filter((event) => event.type === "visits")
+    .slice(0, 12)
+    .map((event) => [fmtDateTime(event.date), event.title, event.status || "-", event.location || "-"]);
+  return reportSection("Próximas visitas", ["Data", "Atividade", "Status", "Local"], rows);
+}
+
+function reportCondoPrioritySection() {
+  const latest = latestVisitByCondo();
+  const rows = state.data.condos
+    .map((condo) => ({ condo, last: latest.get(condo.id), days: daysSince(latest.get(condo.id)?.date) }))
+    .sort((a, b) => b.days - a.days)
+    .slice(0, 12)
+    .map(({ condo, last, days }) => [condo.name || "-", condo.city || "-", condo.neighborhood || "-", last ? fmtDate(last.date) : "Nunca", days >= 9999 ? "Sem histórico" : `${days} dia(s)`, condo.status || "Ativo"]);
+  return reportSection("Condomínios sem visita recente", ["Condomínio", "Cidade", "Bairro", "Última visita", "Tempo", "Status"], rows);
+}
+
 function reportExpansionSection() {
   const rows = state.data.expansions
     .filter((item) => !["Concluído", "Reprovado"].includes(item.status))
     .slice(0, 10)
     .map((item) => [item.condoName || "-", item.type || "-", item.status || "-", fmtDate(item.expectedDate || item.date)]);
   return reportSection("Expansão em acompanhamento", ["Condomínio", "Tipo", "Status", "Previsão"], rows);
+}
+
+function reportExpansionStatusSection() {
+  return reportSection("Expansão por status", ["Status", "Quantidade"], counts(state.data.expansions, "status").map((row) => [row.label, row.value]));
+}
+
+function reportScheduleByDaySection() {
+  const rows = weeklyScheduleRowsForReport()
+    .slice(0, 14)
+    .map((item) => {
+      const condo = findById("condos", item.condoId);
+      return [fmtDate(item.date), `${item.startTime || "-"} às ${item.endTime || "-"}`, condo?.name || item.condoName || "-", scheduleSellers(item) || "-", item.accessMode || "-", item.status || "Programada"];
+    });
+  return reportSection("Programação por dia", ["Data", "Horário", "Condomínio", "Consultor(es)", "Atuação", "Status"], rows);
+}
+
+function reportScheduleConsultantsSection() {
+  const map = new Map();
+  weeklyScheduleRowsForReport().forEach((item) => {
+    scheduleSellerNames(item).forEach((seller) => {
+      const current = map.get(seller) || { routes: 0, condos: new Set() };
+      current.routes += 1;
+      current.condos.add(findById("condos", item.condoId)?.name || item.condoName || "Sem condomínio");
+      map.set(seller, current);
+    });
+  });
+  const rows = [...map.entries()]
+    .sort((a, b) => b[1].routes - a[1].routes)
+    .map(([seller, info]) => [seller, info.routes, [...info.condos].slice(0, 4).join(", ")]);
+  return reportSection("Consultores na programação", ["Consultor", "Rotas", "Condomínios"], rows);
+}
+
+function reportCondoMasterSection() {
+  const rows = state.data.condos
+    .slice(0, 14)
+    .map((condo) => [condo.name || "-", condo.city || "-", condo.neighborhood || "-", condo.managerCompany || "-", condo.capacity || "-", condo.status || "Ativo"]);
+  return reportSection("Cadastro mestre de condomínios", ["Nome", "Cidade", "Bairro", "Administradora", "Unidades", "Status"], rows);
 }
 
 function reportPlansSection() {
@@ -1840,21 +2144,27 @@ function reportPlansSection() {
   return reportSection("Planos ativos", ["Cidade", "Plano", "Velocidade", "Valor"], rows);
 }
 
+function reportPlansByCitySection() {
+  const map = new Map();
+  state.data.plans.filter((plan) => plan.status !== "Inativo").forEach((plan) => {
+    const city = plan.city || "Sem cidade";
+    const current = map.get(city) || { count: 0, min: Infinity, max: 0 };
+    current.count += 1;
+    current.min = Math.min(current.min, Number(plan.price || 0));
+    current.max = Math.max(current.max, Number(plan.price || 0));
+    map.set(city, current);
+  });
+  const rows = [...map.entries()].map(([city, info]) => [city, info.count, money(info.min === Infinity ? 0 : info.min), money(info.max)]);
+  return reportSection("Planos por cidade", ["Cidade", "Planos", "Menor valor", "Maior valor"], rows);
+}
+
 function reportSection(title, headers, rows) {
   const body = rows.length ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headers.length}">Sem registros essenciais para este relatório.</td></tr>`;
   return `<section class="report-section"><h2>${escapeHtml(title)}</h2><table><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></section>`;
 }
 
 function downloadReportExcel() {
-  const rows = [
-    ["Módulo", "Indicador", "Valor"],
-    ["Vendas", "Total", state.data.sales.length],
-    ["Vendas", "Receita", state.data.sales.reduce((sum, sale) => sum + Number(sale.value || 0), 0)],
-    ["Relacionamento", "Registros", state.data.visits.length],
-    ["Expansão", "Demandas", state.data.expansions.length],
-    ["Condomínios", "Cadastro mestre", state.data.condos.length],
-    ...sellerRanking().map((row) => ["Ranking", row.name, row.count])
-  ];
+  const rows = reportExportRows();
   const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(";")).join("\n");
   download(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }), `relatorio-ws-${todayISO()}.csv`);
 }
@@ -2024,31 +2334,48 @@ function download(blob, filename) {
 
 function buildReport() {
   const filter = state.reportFilter;
-  const month = new Date().toISOString().slice(0, 7);
-  const salesMonth = state.data.sales.filter((sale) => String(sale.date || "").startsWith(month));
+  const rows = reportExportRows(filter).slice(1);
   const lines = [
-    "WS Consultoria - Relatório",
+    "Sistema de Gestão Comercial - Relatório",
     `Atividade: ${reportLabel(filter)}`,
     `Gerado em: ${fmtDateTime(new Date().toISOString())}`,
     ""
   ];
-  if (filter === "geral" || filter === "vendas") {
-    lines.push("Vendas", `Total do mês: ${salesMonth.length}`, `Receita: ${money(salesMonth.reduce((sum, sale) => sum + Number(sale.value || 0), 0))}`, "Ranking:");
-    lines.push(...sellerRanking().map((row, index) => `${index + 1}. ${row.name}: ${row.count} venda(s), ${money(row.value)}`), "");
-  }
-  if (filter === "geral" || filter === "visitas") {
-    lines.push("Visitas", `Abertas: ${state.data.visits.filter((visit) => visit.status !== "Concluida").length}`, `Concluídas: ${state.data.visits.filter((visit) => visit.status === "Concluida").length}`);
-    lines.push(...upcomingEvents().filter((event) => event.type === "visits").slice(0, 10).map((event) => `- ${fmtDateTime(event.date)} | ${event.title} | ${event.status}`), "");
-  }
-  if (filter === "geral" || filter === "expansao") {
-    lines.push("Expansão / Vistoria", `Protocolos: ${state.data.expansions.length}`);
-    lines.push(...counts(state.data.expansions, "status").map((row) => `${row.label}: ${row.value}`), "");
-  }
-  if (filter === "geral" || filter === "planos") {
-    lines.push("Planos", `Tabelas cadastradas: ${state.data.plans.length}`);
-    lines.push(...state.data.plans.slice(0, 20).map((plan) => `- ${plan.city || "-"} | ${plan.serviceType || "-"} | ${plan.name || "-"} | ${money(plan.price)}`));
-  }
+  if (!rows.length) lines.push("Nenhuma informação selecionada.");
+  rows.forEach((row) => lines.push(row.filter((cell) => cell !== undefined && cell !== "").join(" | ")));
   return lines.join("\n");
+}
+
+function reportExportRows(filter = state.reportFilter) {
+  const selected = selectedReportOptions(filter);
+  const rows = [["Área", "Bloco", "Campo 1", "Campo 2", "Campo 3", "Campo 4", "Campo 5", "Campo 6", "Campo 7"]];
+  const push = (block, dataRows) => dataRows.forEach((row) => rows.push([reportLabel(filter), block, ...row]));
+  if (selected.has("metrics")) push("Indicadores", reportMetricRows(filter));
+  if (selected.has("salesRanking")) push("Ranking comercial", sellerRanking().slice(0, 12).map((row) => [row.name, row.count, money(row.value), `${row.conversion}%`]));
+  if (selected.has("latestSales")) push("Vendas recentes", [...state.data.sales].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 20).map((sale) => [fmtDate(sale.date), findById("sellers", sale.sellerId)?.name || "-", sale.customer || "-", findById("condos", sale.condoId)?.name || sale.condoName || "-", money(sale.value), sale.status || "Confirmada"]));
+  if (selected.has("salesStatus")) push("Status das vendas", counts(state.data.sales, "status").map((row) => [row.label, row.value]));
+  if (selected.has("relationships")) push("Relacionamento prioritário", state.data.visits.filter((visit) => !["Finalizado", "Visitado"].includes(visit.status)).slice(0, 20).map((visit) => [findById("condos", visit.condoId)?.name || visit.condoName || "-", visit.status || "-", visit.relationship || "-", fmtDate(visit.nextVisit || visit.date)]));
+  if (selected.has("upcomingVisits")) push("Próximas visitas", upcomingEvents().filter((event) => event.type === "visits").slice(0, 20).map((event) => [fmtDateTime(event.date), event.title, event.status || "-", event.location || "-"]));
+  if (selected.has("condoPriorities")) {
+    const latest = latestVisitByCondo();
+    push("Condomínios sem visita", state.data.condos.map((condo) => ({ condo, last: latest.get(condo.id), days: daysSince(latest.get(condo.id)?.date) })).sort((a, b) => b.days - a.days).slice(0, 20).map(({ condo, last, days }) => [condo.name || "-", condo.city || "-", condo.neighborhood || "-", last ? fmtDate(last.date) : "Nunca", days >= 9999 ? "Sem histórico" : `${days} dia(s)`]));
+  }
+  if (selected.has("scheduleByDay")) push("Programação por dia", weeklyScheduleRowsForReport().slice(0, 24).map((item) => [fmtDate(item.date), `${item.startTime || "-"} às ${item.endTime || "-"}`, findById("condos", item.condoId)?.name || item.condoName || "-", scheduleSellers(item) || "-", item.accessMode || "-", item.status || "Programada"]));
+  if (selected.has("scheduleConsultants")) {
+    const map = new Map();
+    weeklyScheduleRowsForReport().forEach((item) => scheduleSellerNames(item).forEach((seller) => map.set(seller, (map.get(seller) || 0) + 1)));
+    push("Consultores na programação", [...map.entries()].sort((a, b) => b[1] - a[1]).map(([seller, routes]) => [seller, routes]));
+  }
+  if (selected.has("expansion")) push("Expansão em acompanhamento", state.data.expansions.filter((item) => !["Concluído", "Reprovado"].includes(item.status)).slice(0, 20).map((item) => [item.condoName || "-", item.type || "-", item.status || "-", fmtDate(item.expectedDate || item.date)]));
+  if (selected.has("expansionStatus")) push("Expansão por status", counts(state.data.expansions, "status").map((row) => [row.label, row.value]));
+  if (selected.has("condoMaster")) push("Cadastro mestre", state.data.condos.slice(0, 24).map((condo) => [condo.name || "-", condo.city || "-", condo.neighborhood || "-", condo.managerCompany || "-", condo.capacity || "-", condo.status || "Ativo"]));
+  if (selected.has("plans")) push("Planos ativos", state.data.plans.filter((plan) => plan.status !== "Inativo").slice(0, 24).map((plan) => [plan.city || "-", plan.name || "-", plan.speed || "-", money(plan.price)]));
+  if (selected.has("plansByCity")) {
+    const map = new Map();
+    state.data.plans.filter((plan) => plan.status !== "Inativo").forEach((plan) => map.set(plan.city || "Sem cidade", (map.get(plan.city || "Sem cidade") || 0) + 1));
+    push("Planos por cidade", [...map.entries()].map(([city, total]) => [city, total]));
+  }
+  return rows;
 }
 
 function reportCards() {
@@ -2193,7 +2520,7 @@ function labelFor(collection) {
 }
 
 function reportLabel(value) {
-  return { geral: "Geral", vendas: "Vendas", visitas: "Visitas", expansao: "Expansão", planos: "Planos" }[value] || value;
+  return { geral: "Geral", vendas: "Vendas", visitas: "Relacionamento", programacao: "Programação", expansao: "Expansão", condominios: "Condomínios", planos: "Planos" }[value] || value;
 }
 
 function pageLabel(page) {

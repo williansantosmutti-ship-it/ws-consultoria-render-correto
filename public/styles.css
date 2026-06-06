@@ -726,6 +726,123 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
   background: #f4f1e8;
   color: var(--primary);
 }
+.report-builder {
+  display: grid;
+  gap: 16px;
+}
+.report-builder-head {
+  align-items: flex-start;
+}
+.report-area-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.report-area-btn {
+  height: auto;
+  min-height: 98px;
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  text-align: left;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.report-area-btn strong {
+  font-size: 15px;
+  color: var(--ink);
+}
+.report-area-btn small {
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.35;
+}
+.report-area-btn.active {
+  border-color: rgba(201, 162, 39, .72);
+  background: linear-gradient(135deg, rgba(201, 162, 39, .14), rgba(19, 37, 31, .04));
+  box-shadow: inset 4px 0 0 var(--accent), 0 12px 26px rgba(21, 26, 22, .06);
+}
+.report-options-box {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--surface), var(--panel));
+}
+.report-options-box > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+.report-options-box strong {
+  font-size: 15px;
+}
+.report-options-box small {
+  color: var(--muted);
+  font-weight: 700;
+}
+.report-option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+.report-option-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink);
+}
+.report-option-card input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+.report-option-card span {
+  display: grid;
+  gap: 3px;
+}
+.backup-panel {
+  display: grid;
+  gap: 16px;
+}
+.backup-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+.backup-summary span {
+  display: grid;
+  gap: 3px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 800;
+}
+.backup-summary strong {
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1;
+}
+.backup-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: rgba(201, 162, 39, .1);
+  color: var(--muted);
+  font-weight: 700;
+}
 .schedule-helper {
   display: grid;
   gap: 4px;
@@ -1040,7 +1157,16 @@ body[data-theme="dark"] .secondary,
 body[data-theme="dark"] .segmented { background: #242b35; color: #f7f1e3; }
 body[data-theme="dark"] .icon-action,
 body[data-theme="dark"] .filter-grid label,
-body[data-theme="dark"] .insight-item { background: #111923; color: var(--ink); }
+body[data-theme="dark"] .insight-item,
+body[data-theme="dark"] .report-area-btn,
+body[data-theme="dark"] .report-option-card,
+body[data-theme="dark"] .backup-summary span { background: #111923; color: var(--ink); }
+body[data-theme="dark"] .report-options-box {
+  background: linear-gradient(180deg, #0e151d, #111923);
+}
+body[data-theme="dark"] .report-area-btn.active {
+  background: linear-gradient(135deg, rgba(214, 173, 79, .14), rgba(255,255,255,.04));
+}
 body[data-theme="dark"] .reminder-drawer {
   background: rgba(17, 25, 35, .96);
   border-color: var(--line);
@@ -1123,17 +1249,19 @@ body[data-theme="dark"] .schedule-card span { background: #342815; color: #f3d88
 
 @media (max-width: 900px) {
   .app { grid-template-columns: 1fr; }
-  .sidebar { position: sticky; top: 0; z-index: 10; padding: 12px; gap: 12px; }
-  .sidebar nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sidebar { position: relative; top: auto; z-index: 10; padding: 12px; gap: 12px; }
+  .sidebar nav { grid-template-columns: 1fr; }
   .workspace { padding: 16px; }
   .topbar { align-items: flex-start; flex-direction: column; }
   .topbar h2 { font-size: 26px; }
+  .section-head { align-items: stretch; flex-direction: column; }
   .dashboard-hero { grid-template-columns: 1fr; align-items: start; }
   .hero-actions { justify-content: stretch; }
   .hero-actions button { flex: 1 1 160px; }
   .top-actions, .toolbar, .alert-actions { width: 100%; }
   .top-actions button:not(.icon-action), .toolbar button, .toolbar input, .toolbar select, .alert-actions button { flex: 1 1 150px; }
   .icon-action { flex: 0 0 42px; }
+  .top-actions { justify-content: flex-end; }
   .reminder-drawer { right: 16px; top: 108px; }
   .toast-area { right: 16px; bottom: 16px; }
   .filter-head { align-items: flex-start; flex-direction: column; }
@@ -1142,12 +1270,14 @@ body[data-theme="dark"] .schedule-card span { background: #342815; color: #f3d88
   .calendar-head, .calendar-grid { grid-template-columns: 1fr; }
   .calendar-head { display: none; }
   .calendar-day { min-height: auto; }
-  .weekly-board { grid-template-columns: repeat(5, minmax(220px, 1fr)); }
+  .weekly-board { grid-template-columns: 1fr; }
   .history-toolbar { grid-template-columns: 1fr; }
   .map-layout { grid-template-columns: 1fr; }
   .google-map-frame { height: 360px; }
   .bar-row { grid-template-columns: 1fr; }
   .toolbar input, .toolbar select { width: 100%; }
+  .report-area-grid, .report-option-grid, .backup-summary { grid-template-columns: 1fr; }
+  .report-preview { padding: 10px; }
   .alert { align-items: flex-start; flex-direction: column; }
 }
 
@@ -1156,17 +1286,21 @@ body[data-theme="dark"] .schedule-card span { background: #342815; color: #f3d88
   .login-panel { padding: 24px 20px; }
   .login-logo { width: min(180px, 74vw); height: min(180px, 74vw); }
   .brand-mark { width: 54px; height: 54px; }
-  .sidebar nav { grid-template-columns: 1fr 1fr; }
+  .sidebar nav { grid-template-columns: 1fr; }
   .nav-btn { padding: 0 10px; font-size: 13px; }
   .nav-group { min-width: 0; }
   .nav-group.open .nav-submenu { padding-left: 0; }
   .workspace { padding: 14px; }
   .topbar h2 { font-size: 24px; }
+  .top-actions { justify-content: flex-start; }
   .dashboard-hero { padding: 18px; background-size: 190px; }
   .dashboard-hero h3 { font-size: 22px; }
   .coverage-map { min-height: 300px; }
   .google-map-frame { height: 300px; }
   .card, .chart-card { padding: 14px; }
+  .toolbar button, .toolbar input, .toolbar select, .file-button { width: 100%; }
+  .report-area-btn { min-height: 86px; }
+  .report-preview .report-page { padding: 20px; }
   table { min-width: 720px; }
 }
 
