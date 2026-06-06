@@ -47,15 +47,17 @@
             <h2 id="pageTitle">Dashboard</h2>
           </div>
           <div class="top-actions">
+            <button id="reminderBtn" class="icon-action" type="button" aria-label="Ver lembretes">🔔<span id="reminderBadge" class="badge-count hidden">0</span></button>
             <button id="themeBtn" class="secondary" type="button">Modo escuro</button>
             <button id="exportBtn" class="secondary">Copiar backup</button>
             <button id="printBtn" class="secondary">Imprimir relatório</button>
           </div>
         </header>
 
-        <section id="alerts" class="alerts"></section>
+        <section id="alerts" class="reminder-drawer hidden"></section>
         <section id="content"></section>
       </section>
+      <section id="toastArea" class="toast-area"></section>
     </div>
 
     <template id="modalTemplate">

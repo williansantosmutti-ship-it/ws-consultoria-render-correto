@@ -10,6 +10,8 @@ const state = {
   reportFilter: "geral",
   scheduleView: "week",
   calendarDate: new Date(),
+  remindersOpen: false,
+  activeToasts: new Set(),
   dismissedAlerts: new Set(JSON.parse(localStorage.getItem("ws-dismissed-alerts") || "[]"))
 };
 
@@ -87,6 +89,7 @@ async function boot() {
   $("#themeBtn").addEventListener("click", toggleTheme);
   $("#exportBtn").addEventListener("click", backupData);
   $("#printBtn").addEventListener("click", printExecutiveReport);
+  $("#reminderBtn").addEventListener("click", toggleReminderDrawer);
   try {
     const session = await request("/api/me");
     state.user = session.user;
@@ -186,7 +189,8 @@ function render() {
   $("#pageTitle").textContent = pageLabel(state.page);
   renderLogo();
   applyTheme();
-  renderAlerts();
+  renderReminderBadge();
+  renderReminderDrawer();
   const views = { dashboard, agenda, condos, weeklySchedules, coverageMap, visits, expansions, sellers, sales, plans, reports, logs, users, settings };
   $("#content").innerHTML = views[state.page]();
   bindPageEvents();
@@ -225,17 +229,72 @@ function renderLogo() {
   document.documentElement.style.setProperty("--accent", state.settings.accentColor || "#c9a227");
 }
 
+function reminderEvents() {
+  return upcomingEvents().filter((event) => !state.dismissedAlerts.has(alertKey(event))).slice(0, 8);
+}
+
+function renderReminderBadge() {
+  const count = reminderEvents().length;
+  const badge = $("#reminderBadge");
+  badge.textContent = count;
+  badge.classList.toggle("hidden", count === 0);
+}
+
+function renderReminderDrawer() {
+  const drawer = $("#alerts");
+  const soon = reminderEvents();
+  drawer.classList.toggle("hidden", !state.remindersOpen);
+  drawer.innerHTML = `<div class="reminder-drawer-head">
+    <strong>Lembretes</strong>
+    <button class="icon close-reminders" data-close-reminders>×</button>
+  </div>
+  ${soon.length ? soon.map(reminderItem).join("") : `<div class="empty compact">Nenhum lembrete pendente.</div>`}`;
+  bindReminderEvents();
+}
+
+function reminderItem(event) {
+  return `<div class="alert reminder-item">
+    <span><strong>${fmtDateTime(event.date)}</strong> - ${escapeHtml(event.title)}<small>${escapeHtml(event.note || "")}</small></span>
+    <div class="alert-actions">
+      <button class="secondary" data-calendar="${event.type}:${event.id}">Google Agenda</button>
+      <button class="ghost" data-dismiss-alert="${alertKey(event)}">Fechar</button>
+    </div>
+  </div>`;
+}
+
 function renderAlerts() {
   const soon = upcomingEvents().filter((event) => !state.dismissedAlerts.has(alertKey(event))).slice(0, 4);
-  $("#alerts").innerHTML = soon.map((event) => {
-    return `<div class="alert">
-      <span><strong>${fmtDateTime(event.date)}</strong> - ${escapeHtml(event.title)}<small>${escapeHtml(event.note || "")}</small></span>
-      <div class="alert-actions">
-        <button class="secondary" data-calendar="${event.type}:${event.id}">Google Agenda</button>
-        <button class="ghost" data-dismiss-alert="${alertKey(event)}">Dispensar</button>
-      </div>
-    </div>`;
-  }).join("");
+  $("#toastArea").innerHTML = soon.filter((event) => state.activeToasts.has(alertKey(event))).map((event) => `<div class="toast">
+    <button class="toast-close" data-close-toast="${alertKey(event)}">×</button>
+    <strong>${fmtDateTime(event.date)}</strong>
+    <span>${escapeHtml(event.title)}</span>
+    <small>${escapeHtml(event.note || "")}</small>
+  </div>`).join("");
+  renderReminderBadge();
+  renderReminderDrawer();
+  bindReminderEvents();
+}
+
+function toggleReminderDrawer() {
+  state.remindersOpen = !state.remindersOpen;
+  renderReminderDrawer();
+}
+
+function bindReminderEvents() {
+  document.querySelectorAll("[data-dismiss-alert]").forEach((button) => {
+    if (button.dataset.bound) return;
+    button.dataset.bound = "1";
+    button.addEventListener("click", () => dismissAlert(button.dataset.dismissAlert));
+  });
+  document.querySelectorAll("[data-close-toast]").forEach((button) => {
+    if (button.dataset.bound) return;
+    button.dataset.bound = "1";
+    button.addEventListener("click", () => closeToast(button.dataset.closeToast));
+  });
+  $("[data-close-reminders]")?.addEventListener("click", () => {
+    state.remindersOpen = false;
+    renderReminderDrawer();
+  }, { once: true });
 }
 
 function dashboard() {
@@ -290,6 +349,7 @@ function summaryDashboard() {
       ${metric("Vendas do mês", salesMonth.length)}
       ${metric("Protocolos em aberto", openExpansions)}
     </div>
+    ${smartRecommendations()}
     <div class="grid cols-2">
       <section class="card">
         <div class="section-head"><h3>Hoje</h3><button class="primary" data-new="weeklySchedules">Nova programação</button></div>
@@ -304,6 +364,32 @@ function summaryDashboard() {
       <div class="section-head"><h3>Próximas atividades</h3><button class="secondary" data-page-jump="weeklySchedules">Ver programação</button></div>
       ${table(["Data", "Atividade", "Local"], upcomingEvents().slice(0, 10).map((event) => [fmtDateTime(event.date), event.title, event.location || "-"]))}
     </section>`;
+}
+
+function smartRecommendations() {
+  const latest = latestVisitByCondo();
+  const stale60 = state.data.condos.filter((condo) => daysSince(latest.get(condo.id)?.date) > 60).length;
+  const nextToday = upcomingEvents().filter((event) => String(event.date || "").slice(0, 10) === todayISO()).length;
+  const expansionRisk = state.data.expansions.filter((item) => ["Em análise", "Aguardando aprovação", "Em vistoria", "Em inspeção"].includes(item.status)).length;
+  const sellerRows = sellerRanking();
+  const leader = sellerRows[0];
+  const suggestions = [
+    stale60 ? { title: `${stale60} condomínios sem visita há mais de 60 dias`, note: "Priorize retorno em locais com potencial comercial alto.", action: "Ver histórico", page: "weeklySchedules" } : null,
+    expansionRisk ? { title: `${expansionRisk} demandas de expansão pedem acompanhamento`, note: "Acompanhe aprovações e vistorias para evitar perda de prazo.", action: "Ver expansão", page: "expansions" } : null,
+    leader ? { title: `${leader.name} lidera o mês com ${leader.count} venda(s)`, note: "Use o padrão do melhor desempenho para orientar a equipe.", action: "Ver vendedores", page: "sellers" } : null,
+    nextToday ? { title: `${nextToday} atividade(s) ainda hoje`, note: "Confira programação e relacionamento antes de sair para campo.", action: "Ver agenda", page: "agenda" } : null
+  ].filter(Boolean).slice(0, 4);
+  if (!suggestions.length) return "";
+  return `<section class="card insight-card">
+    <div class="section-head"><h3>Sugestões inteligentes</h3><small>Prioridades geradas pelo sistema</small></div>
+    <div class="insight-grid">
+      ${suggestions.map((item) => `<article class="insight-item">
+        <strong>${escapeHtml(item.title)}</strong>
+        <span>${escapeHtml(item.note)}</span>
+        <button class="secondary" data-page-jump="${item.page}">${escapeHtml(item.action)}</button>
+      </article>`).join("")}
+    </div>
+  </section>`;
 }
 
 function salesDashboard() {
@@ -701,10 +787,17 @@ function listView(title, collection, headers, rows, noSearch = false) {
 }
 
 function filterPanel(page, fields) {
+  const active = Object.values(state.filters[page] || {}).filter(Boolean).length;
   return `<section class="card filter-card">
-    <div class="section-head">
-      <h3>Filtros</h3>
-      <button class="secondary" type="button" data-filter-clear="${page}">Limpar filtros</button>
+    <div class="filter-head">
+      <div>
+        <span>Consulta</span>
+        <h3>Filtros avançados</h3>
+      </div>
+      <div class="filter-actions">
+        <small>${active ? `${active} filtro(s) ativo(s)` : "Sem filtros ativos"}</small>
+        <button class="secondary" type="button" data-filter-clear="${page}">Limpar</button>
+      </div>
     </div>
     <div class="filter-grid">${fields.join("")}</div>
   </section>`;
@@ -874,7 +967,7 @@ function bindPageEvents() {
   });
   document.querySelectorAll("[data-calendar]").forEach((button) => button.addEventListener("click", () => openCalendar(button.dataset.calendar)));
   document.querySelectorAll("[data-email]").forEach((button) => button.addEventListener("click", () => openEmail(button.dataset.email)));
-  document.querySelectorAll("[data-dismiss-alert]").forEach((button) => button.addEventListener("click", () => dismissAlert(button.dataset.dismissAlert)));
+  bindReminderEvents();
   document.querySelectorAll("[data-search]").forEach((input) => input.addEventListener("input", () => {
     state.query = input.value;
     render();
@@ -1536,7 +1629,13 @@ async function toggleUser(id, active) {
 
 function dismissAlert(key) {
   state.dismissedAlerts.add(key);
+  state.activeToasts.delete(key);
   localStorage.setItem("ws-dismissed-alerts", JSON.stringify([...state.dismissedAlerts]));
+  renderAlerts();
+}
+
+function closeToast(key) {
+  state.activeToasts.delete(key);
   renderAlerts();
 }
 
@@ -2072,6 +2171,12 @@ function checkReminders() {
   });
   soon.forEach((event) => {
     sessionStorage.setItem(`reminded-${event.type}-${event.id}`, "1");
+    const key = alertKey(event);
+    state.activeToasts.add(key);
+    setTimeout(() => {
+      state.activeToasts.delete(key);
+      renderAlerts();
+    }, 9000);
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification("Lembrete WS Consultoria", { body: `${fmtDateTime(event.date)} - ${event.title}` });
     }
