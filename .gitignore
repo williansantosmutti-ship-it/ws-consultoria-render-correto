@@ -1,0 +1,11 @@
+.env
+.env.example
+node_modules/
+npm-debug.log*
+data/*.backup*.json
+data/.gitkeep
+*.lnk
+*.zip
+*.bat
+*.vbs
+scripts/
