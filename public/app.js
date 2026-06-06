@@ -5,6 +5,7 @@ const state = {
   page: "dashboard",
   query: "",
   filters: {},
+  filterOpen: new Set(),
   navOpen: new Set(),
   dashboardFilter: "resumo",
   reportFilter: "geral",
@@ -788,18 +789,18 @@ function listView(title, collection, headers, rows, noSearch = false) {
 
 function filterPanel(page, fields) {
   const active = Object.values(state.filters[page] || {}).filter(Boolean).length;
-  return `<section class="card filter-card">
-    <div class="filter-head">
-      <div>
-        <span>Consulta</span>
-        <h3>Filtros avançados</h3>
-      </div>
+  const open = state.filterOpen.has(page);
+  return `<section class="filter-card ${open ? "open" : ""}">
+    <div class="filter-head compact">
+      <button class="primary" type="button" data-filter-toggle="${page}">Filtro</button>
       <div class="filter-actions">
         <small>${active ? `${active} filtro(s) ativo(s)` : "Sem filtros ativos"}</small>
         <button class="secondary" type="button" data-filter-clear="${page}">Limpar</button>
       </div>
     </div>
-    <div class="filter-grid">${fields.join("")}</div>
+    <div class="filter-panel">
+      <div class="filter-grid">${fields.join("")}</div>
+    </div>
   </section>`;
 }
 
@@ -975,6 +976,11 @@ function bindPageEvents() {
   document.querySelectorAll("[data-filter]").forEach((input) => input.addEventListener("input", () => {
     const [page, key] = input.dataset.filter.split(":");
     state.filters[page] = { ...(state.filters[page] || {}), [key]: input.value };
+    render();
+  }));
+  document.querySelectorAll("[data-filter-toggle]").forEach((button) => button.addEventListener("click", () => {
+    const page = button.dataset.filterToggle;
+    state.filterOpen.has(page) ? state.filterOpen.delete(page) : state.filterOpen.add(page);
     render();
   }));
   document.querySelectorAll("[data-filter-clear]").forEach((button) => button.addEventListener("click", () => {
@@ -1711,8 +1717,8 @@ function reportPrintStyles() {
     .report-page { width: 100%; min-height: 190mm; background: white; padding: 16mm; position: relative; overflow: hidden; }
     .report-page::before { content: ""; position: absolute; inset: 0; border-top: 8px solid #c9a227; border-bottom: 8px solid #13251f; pointer-events: none; }
     .report-watermark { position: absolute; right: 18mm; bottom: 16mm; width: 76mm; opacity: .05; }
-    .report-head { display: grid; grid-template-columns: 28mm 1fr auto; gap: 12px; align-items: center; border-bottom: 1px solid #d9dedc; padding-bottom: 10px; margin-bottom: 12px; position: relative; z-index: 1; }
-    .report-logo { width: 24mm; height: 24mm; object-fit: contain; border-radius: 6px; background: #070b12; }
+    .report-head { display: grid; grid-template-columns: 38mm 1fr auto; gap: 12px; align-items: center; border-bottom: 1px solid #d9dedc; padding-bottom: 10px; margin-bottom: 12px; position: relative; z-index: 1; }
+    .report-logo { width: 34mm; max-height: 16mm; object-fit: contain; border-radius: 0; background: transparent; }
     h1 { margin: 0; font-size: 20px; color: #13251f; text-transform: uppercase; letter-spacing: .03em; }
     .subtitle { margin-top: 4px; font-size: 11px; color: #66736e; font-weight: 700; }
     .stamp { text-align: right; font-size: 10px; color: #66736e; line-height: 1.5; }
@@ -1735,7 +1741,6 @@ function reportPrintStyles() {
 function reportDocumentHtml(filter = state.reportFilter) {
   const logo = reportLogoSrc();
   return `<main class="report-page">
-    <img class="report-watermark" src="${escapeHtml(logo)}" alt="">
     <header class="report-head">
       <img class="report-logo" src="${escapeHtml(logo)}" alt="Logo">
       <div>
@@ -1755,12 +1760,7 @@ function reportDocumentHtml(filter = state.reportFilter) {
 }
 
 function reportLogoSrc() {
-  const logo = state.settings.logoUrl || "/assets/ws-logo.png";
-  try {
-    return new URL(logo, location.origin).href;
-  } catch {
-    return "/assets/ws-logo.png";
-  }
+  return `${location.origin}/assets/use-logo.gif`;
 }
 
 function reportPreview() {
