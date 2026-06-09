@@ -1,4 +1,4 @@
-const CACHE_NAME = "ws-consultoria-v16";
+const CACHE_NAME = "ws-consultoria-v17";
 const APP_FILES = [
   "/",
   "/index.html",
@@ -6,6 +6,8 @@ const APP_FILES = [
   "/app.js",
   "/map-layers.json",
   "/vendor/jszip.min.js",
+  "/vendor/pdf.min.mjs",
+  "/vendor/pdf.worker.min.mjs",
   "/manifest.webmanifest",
   "/assets/ws-logo.png",
   "/assets/use-logo.gif"

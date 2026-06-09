@@ -11,6 +11,14 @@ const state = {
   reportFilter: "geral",
   reportOptions: {},
   scheduleView: "week",
+  scheduleImport: {
+    status: "idle",
+    fileName: "",
+    message: "",
+    rows: [],
+    rawText: "",
+    weekStart: ""
+  },
   calendarDate: new Date(),
   remindersOpen: false,
   activeToasts: new Set(),
@@ -518,6 +526,7 @@ function weeklySchedules() {
       filterSelect("condo", "Condomínio", options("condos").slice(1)),
       filterSelect("status", "Status", ["Programada", "Confirmada", "Em andamento", "Concluída", "Reagendar", "Cancelada"])
     ])}
+    ${scheduleImportPanel()}
     <section class="card">
       <div class="section-head">
         <h3>Programação</h3>
@@ -533,6 +542,53 @@ function weeklySchedules() {
       </div>
       ${state.scheduleView === "history" ? scheduleHistoryView() : weeklyBoard(rows)}
     </section>`;
+}
+
+function scheduleImportPanel() {
+  const weekStart = state.scheduleImport.weekStart || currentMondayISO();
+  const rows = state.scheduleImport.rows || [];
+  const ready = rows.filter((row) => row.condoId && row.sellerIds.length && row.date);
+  const pending = rows.length - ready.length;
+  const previewRows = rows.slice(0, 12).map((row) => [
+    `${escapeHtml(row.dayLabel)}<small>${escapeHtml(fmtDate(row.date))}</small>`,
+    `${escapeHtml(row.consultantText || "-")}<small>${escapeHtml(row.sellerNames || "Não localizado")}</small>`,
+    `${escapeHtml(row.condoText || "-")}<small>${escapeHtml(row.condoName || "Não localizado")}</small>`,
+    `${escapeHtml(row.startTime)} às ${escapeHtml(row.endTime)}`,
+    row.ready ? status("Pronto") : status("Revisar", "warn")
+  ]);
+  return `<section class="card schedule-import-card">
+    <div class="section-head">
+      <div>
+        <h3>Importar programação por PDF</h3>
+        <p class="hint">Selecione o arquivo da programação semanal. O sistema identifica dia, consultor e condomínio usando os cadastros já salvos.</p>
+      </div>
+      <div class="toolbar">
+        <label>Segunda-feira da semana<input type="date" data-import-week-start value="${escapeHtml(weekStart)}"></label>
+        <label class="file-button">Ler PDF<input type="file" data-import-schedule-pdf accept="application/pdf,.pdf"></label>
+        ${rows.length ? `<button class="secondary" data-clear-schedule-import>Limpar</button>` : ""}
+        ${ready.length ? `<button class="primary" data-commit-schedule-import>Lançar ${ready.length} rota(s)</button>` : ""}
+      </div>
+    </div>
+    ${state.scheduleImport.message ? `<p class="import-message">${escapeHtml(state.scheduleImport.message)}</p>` : ""}
+    ${rows.length ? `<div class="import-summary">
+      <span><strong>${rows.length}</strong>linha(s) lida(s)</span>
+      <span><strong>${ready.length}</strong>pronta(s) para lançar</span>
+      <span><strong>${pending}</strong>precisa(m) revisão</span>
+      <span><strong>${escapeHtml(state.scheduleImport.fileName || "-")}</strong>arquivo</span>
+    </div>
+    ${table(["Dia", "Consultor", "Condomínio", "Horário", "Status"], previewRows)}
+    ${rows.length > previewRows.length ? `<p class="hint">Mostrando as primeiras ${previewRows.length} linhas. Ao lançar, todas as ${ready.length} rotas prontas serão gravadas.</p>` : ""}
+    ${scheduleImportIssues(rows)}` : `<div class="empty compact">Nenhum PDF lido ainda.</div>`}
+  </section>`;
+}
+
+function scheduleImportIssues(rows) {
+  const issues = rows.filter((row) => !row.ready).slice(0, 8);
+  if (!issues.length) return "";
+  return `<div class="import-issues">
+    <strong>Pontos para revisar</strong>
+    ${issues.map((row) => `<span>${escapeHtml(row.dayLabel)} - ${escapeHtml(row.consultantText || "-")} - ${escapeHtml(row.condoText || "-")}: ${escapeHtml(row.issue)}</span>`).join("")}
+  </div>`;
 }
 
 function scheduleSegment(id, label) {
@@ -1077,6 +1133,16 @@ function bindPageEvents() {
   $("[data-copy-logs]")?.addEventListener("click", copyLogs);
   $("[data-copy-schedule]")?.addEventListener("click", copyWeeklySchedule);
   $("[data-download-schedule]")?.addEventListener("click", downloadWeeklySchedule);
+  $("[data-import-schedule-pdf]")?.addEventListener("change", importWeeklySchedulePdf);
+  $("[data-import-week-start]")?.addEventListener("change", (event) => {
+    state.scheduleImport.weekStart = event.target.value || currentMondayISO();
+    if (state.scheduleImport.rawText) {
+      state.scheduleImport.rows = parseWeeklyScheduleText(state.scheduleImport.rawText, state.scheduleImport.weekStart);
+    }
+    render();
+  });
+  $("[data-clear-schedule-import]")?.addEventListener("click", clearScheduleImport);
+  $("[data-commit-schedule-import]")?.addEventListener("click", commitScheduleImport);
   $("[data-map-files]")?.addEventListener("change", importMapFiles);
   $("[data-clear-map-files]")?.addEventListener("click", () => {
     mapState.files = [];
@@ -1687,6 +1753,385 @@ async function importSalesText() {
   } catch (error) {
     alert(error.message);
   }
+}
+
+let pdfLoaderPromise = null;
+
+async function importWeeklySchedulePdf(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  state.scheduleImport = {
+    ...state.scheduleImport,
+    status: "loading",
+    fileName: file.name,
+    message: "Lendo PDF e cruzando com os cadastros...",
+    rows: [],
+    rawText: "",
+    weekStart: state.scheduleImport.weekStart || currentMondayISO()
+  };
+  render();
+  try {
+    const text = await extractPdfText(file);
+    const rows = parseWeeklyScheduleText(text, state.scheduleImport.weekStart);
+    const ready = rows.filter((row) => row.ready).length;
+    state.scheduleImport = {
+      ...state.scheduleImport,
+      status: "ready",
+      rawText: text,
+      rows,
+      message: `${rows.length} linha(s) identificada(s). ${ready} pronta(s) para lançar.`
+    };
+  } catch (error) {
+    state.scheduleImport = {
+      ...state.scheduleImport,
+      status: "error",
+      message: `Não foi possível ler o PDF: ${error.message}`,
+      rows: [],
+      rawText: ""
+    };
+  }
+  render();
+}
+
+async function extractPdfText(file) {
+  if (!pdfLoaderPromise) {
+    pdfLoaderPromise = import("/vendor/pdf.min.mjs").then((pdfjsLib) => {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "/vendor/pdf.worker.min.mjs";
+      return pdfjsLib;
+    });
+  }
+  const pdfjsLib = await pdfLoaderPromise;
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const pages = [];
+  for (let index = 1; index <= pdf.numPages; index += 1) {
+    const page = await pdf.getPage(index);
+    const content = await page.getTextContent();
+    pages.push(pdfTextLines(content.items).join("\n"));
+  }
+  return pages.join("\n");
+}
+
+function pdfTextLines(items) {
+  const lines = new Map();
+  items.forEach((item) => {
+    const text = String(item.str || "").trim();
+    if (!text) return;
+    const x = Math.round(item.transform?.[4] || 0);
+    const y = Math.round(item.transform?.[5] || 0);
+    const key = [...lines.keys()].find((current) => Math.abs(current - y) <= 2) ?? y;
+    if (!lines.has(key)) lines.set(key, []);
+    lines.get(key).push({ x, text });
+  });
+  return [...lines.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([, parts]) => parts.sort((a, b) => a.x - b.x).map((part) => part.text).join(" ").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function parseWeeklyScheduleText(text, weekStart = currentMondayISO()) {
+  const lines = String(text || "").split(/\r?\n/).map(cleanScheduleLine).filter(Boolean);
+  const blocks = [];
+  let current = null;
+  let pendingDay = null;
+  lines.forEach((line) => {
+    const dayIndex = detectWeekday(line);
+    if (dayIndex >= 0 && !isScheduleImportHeader(line)) {
+      pendingDay = dayIndex;
+      return;
+    }
+    if (isScheduleImportHeader(line)) {
+      current = { dayIndex: pendingDay ?? blocks.length, lines: [] };
+      blocks.push(current);
+      pendingDay = null;
+      return;
+    }
+    if (current) current.lines.push(line);
+  });
+  return blocks.flatMap((block) => block.lines.map((line) => parseScheduleImportLine(line)).filter(Boolean).map((row) => resolveScheduleImportRow(row, block.dayIndex, weekStart)));
+}
+
+function cleanScheduleLine(value) {
+  return String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isScheduleImportHeader(line) {
+  const value = normalizeKey(line);
+  return value.includes("DIA") && value.includes("CONSULTOR") && !value.includes("ATIVIDADE");
+}
+
+function parseScheduleImportLine(line) {
+  if (ignoreScheduleImportLine(line)) return null;
+  const { text, startTime, endTime } = extractScheduleTime(line);
+  const parts = text.split(/\s+/).filter(Boolean);
+  if (!parts.length) return null;
+  const aliases = scheduleSellerAliases();
+  const normalized = normalizeKey(text);
+  let matchedAlias = aliases.find((alias) => normalized === alias.key || normalized.startsWith(`${alias.key} `));
+  if (!matchedAlias && parts.length) matchedAlias = { label: parts[0], words: 1, seller: null };
+  const consultantText = parts.slice(0, matchedAlias.words).join(" ");
+  const condoText = parts.slice(matchedAlias.words).join(" ");
+  return { consultantText, condoText, startTime, endTime, seller: matchedAlias.seller || null };
+}
+
+function ignoreScheduleImportLine(line) {
+  const value = normalizeKey(line);
+  if (!value) return true;
+  if (/^\d{1,2}H(?:\d{2})?(?:\s|-|A|AS)*\d{0,2}H?\d{0,2}$/.test(value)) return true;
+  return ["PROGRAMACAO", "PROGRAMAÇÃO", "DA SEMANA", "CAMPO SEMANAL", "REGIAO", "REGIÃO", "ATIVIDADE", "CONDOMINIOS RUA", "HORARIO", "SABADO"].some((token) => value.includes(normalizeKey(token)));
+}
+
+function extractScheduleTime(line) {
+  const match = String(line).match(/(\d{1,2})\s*h(?:[:.]?(\d{2}))?\s*(?:-|a|às|as)\s*(\d{1,2})\s*h(?:[:.]?(\d{2}))?/i);
+  if (!match) return { text: line, startTime: "08:00", endTime: "17:00" };
+  const startTime = `${match[1].padStart(2, "0")}:${match[2] || "00"}`;
+  const endTime = `${match[3].padStart(2, "0")}:${match[4] || "00"}`;
+  return { text: line.replace(match[0], "").trim(), startTime, endTime };
+}
+
+function scheduleSellerAliases() {
+  const aliases = [];
+  state.data.sellers.forEach((seller) => {
+    const name = String(seller.name || "").trim();
+    if (!name) return;
+    const parts = name.split(/\s+/).filter(Boolean);
+    aliases.push({ key: normalizeKey(name), label: name, words: parts.length, seller });
+    if (parts[0]) aliases.push({ key: normalizeKey(parts[0]), label: parts[0], words: 1, seller });
+    if (normalizeKey(parts[0]) === "ISIS") aliases.push({ key: "ISIS SILVA", label: "ISIS SILVA", words: 2, seller });
+  });
+  ["IVAN", "BRUNA", "ADRIELE", "LUISE", "ISIS SILVA", "FLAVIA"].forEach((name) => {
+    if (!aliases.some((alias) => alias.key === normalizeKey(name))) aliases.push({ key: normalizeKey(name), label: name, words: name.split(/\s+/).length, seller: null });
+  });
+  return aliases.sort((a, b) => b.key.length - a.key.length);
+}
+
+function resolveScheduleImportRow(row, dayIndex, weekStart) {
+  const boundedDayIndex = Math.max(0, Math.min(dayIndex, 5));
+  const seller = row.seller || findBestSeller(row.consultantText);
+  const condo = findBestCondo(row.condoText);
+  const issue = [
+    seller ? "" : "consultor não cadastrado",
+    condo ? "" : "condomínio não localizado"
+  ].filter(Boolean).join("; ");
+  return {
+    dayIndex: boundedDayIndex,
+    dayLabel: importWeekdays()[boundedDayIndex]?.label || "Dia",
+    date: dateFromWeekStart(weekStart, boundedDayIndex),
+    consultantText: row.consultantText,
+    condoText: row.condoText,
+    sellerIds: seller ? [seller.id] : [],
+    sellerNames: seller?.name || "",
+    condoId: condo?.id || "",
+    condoName: condo?.name || "",
+    address: condo?.address || "",
+    startTime: row.startTime || "08:00",
+    endTime: row.endTime || "17:00",
+    accessMode: "Pode entrar",
+    status: "Programada",
+    followUpDays: 30,
+    workArea: "Área geral",
+    issue: issue || "",
+    ready: Boolean(seller && condo)
+  };
+}
+
+function findBestSeller(value) {
+  const key = normalizeKey(value);
+  return state.data.sellers.find((seller) => {
+    const sellerKey = normalizeKey(seller.name);
+    const first = sellerKey.split(" ")[0];
+    return sellerKey === key || first === key || key.startsWith(`${first} `);
+  });
+}
+
+function findBestCondo(value) {
+  const query = normalizeKey(value);
+  if (!query) return null;
+  const aliasMatch = findCondoByImportAlias(query);
+  if (aliasMatch) return aliasMatch;
+  const queryCompact = query.replace(/\s+/g, "");
+  const queryTokens = query.split(" ").filter((token) => token.length > 1);
+  let best = { condo: null, score: 0 };
+  state.data.condos.forEach((condo) => {
+    const fields = [
+      { value: condo.name, weight: 25, cap: 120 },
+      { value: condo.condoName, weight: 25, cap: 120 },
+      { value: condo.neighborhood, weight: -12, cap: 50 },
+      { value: condo.address, weight: -18, cap: 48 }
+    ].filter((field) => field.value).map((field) => ({ ...field, key: normalizeKey(field.value) }));
+    let score = 0;
+    fields.forEach(({ key: name, weight, cap }) => {
+      const compact = name.replace(/\s+/g, "");
+      const nameTokens = name.split(" ").filter((token) => token.length > 1 && !importStopwords().has(token));
+      let current = 0;
+      if (name === query) current = 110;
+      else if (compact === queryCompact) current = 105;
+      else if (name.includes(query) || query.includes(name)) current = queryTokens.length === 1 ? 72 : 92;
+      else {
+        const overlap = queryTokens.filter((token) => !importStopwords().has(token) && nameTokens.some((nameToken) => importTokenMatch(token, nameToken))).length;
+        current = overlap ? 35 + (overlap / Math.max(1, queryTokens.filter((token) => !importStopwords().has(token)).length)) * 55 : 0;
+        const similarity = compactSimilarity(queryCompact, compact);
+        if (similarity >= 0.82) current = Math.max(current, 82 + similarity * 12);
+      }
+      current = Math.min(cap, current + weight);
+      score = Math.max(score, current);
+    });
+    if (score > best.score) best = { condo, score };
+  });
+  return best.score >= 58 ? best.condo : null;
+}
+
+function findCondoByImportAlias(query) {
+  const aliases = {
+    "INTER VILAS": ["INTERVILLAS"],
+    "PICUAIA": ["CONDOMINIO RESERVA DO PICUAIA", "COND RESERVAS DO PICUAIA", "RESERVA DO PICUAIA"],
+    "ARBORIS": ["ARBORIS"],
+    "RIVIERA": ["CONDOMINIO RIVIERA", "RIVIERA PRACAS", "RESIDENCIAL RIVIERA"],
+    "SANTA TEREZA": ["SANTA TEREZA"],
+    "VILLE LOZART": ["VILLE LOZATH", "VILLE LOZARTH"],
+    "VILLE LOZATH": ["VILLE LOZATH", "VILLE LOZARTH"],
+    "PIATA VILLE": ["PIATA VILLE"],
+    "RESERVA PRAIA BURAQUINHO": ["RESERVA PRAIA DE BURAQUINHO"],
+    "MANSAO EMILIA": ["MANSAO EMILIA"],
+    "BEIRA RIO": ["BEIRA RIO"],
+    "IMBUI VILLE": ["IMBUI VILLE"],
+    "NEW JOANES": ["NEW JOANES"]
+  };
+  const values = aliases[query] || aliases[query.replace(/\s+/g, " ")] || [];
+  for (const alias of values) {
+    const aliasKey = normalizeKey(alias);
+    const exact = state.data.condos.find((condo) => normalizeKey(condo.name) === aliasKey || normalizeKey(condo.condoName) === aliasKey);
+    if (exact) return exact;
+    const byName = state.data.condos.find((condo) => {
+      const name = normalizeKey(condo.name || condo.condoName || "");
+      return name.includes(aliasKey) || aliasKey.includes(name);
+    });
+    if (byName) return byName;
+  }
+  return null;
+}
+
+function importStopwords() {
+  return new Set(["DE", "DA", "DO", "DAS", "DOS", "COND", "CONDOMINIO", "RESIDENCIAL", "EDIFICIO"]);
+}
+
+function importTokenMatch(token, nameToken) {
+  if (token === nameToken) return true;
+  if (token.length < 4 || nameToken.length < 4) return false;
+  return token.includes(nameToken) || nameToken.includes(token);
+}
+
+function compactSimilarity(a, b) {
+  if (!a || !b) return 0;
+  const longer = a.length >= b.length ? a : b;
+  const shorter = a.length >= b.length ? b : a;
+  if (longer.includes(shorter)) return shorter.length / longer.length;
+  const distance = levenshteinDistance(a, b);
+  return 1 - distance / Math.max(a.length, b.length);
+}
+
+function levenshteinDistance(a, b) {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j += 1) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]) + 1;
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function importWeekdays() {
+  return [
+    { label: "Segunda-feira", offset: 0 },
+    { label: "Terça-feira", offset: 1 },
+    { label: "Quarta-feira", offset: 2 },
+    { label: "Quinta-feira", offset: 3 },
+    { label: "Sexta-feira", offset: 4 },
+    { label: "Sábado", offset: 5 }
+  ];
+}
+
+function detectWeekday(line) {
+  const value = normalizeKey(line);
+  return importWeekdays().findIndex((day) => value.includes(normalizeKey(day.label)));
+}
+
+function currentMondayISO(date = new Date()) {
+  const base = new Date(date);
+  const diff = base.getDay() === 0 ? -6 : 1 - base.getDay();
+  base.setDate(base.getDate() + diff);
+  return base.toISOString().slice(0, 10);
+}
+
+function dateFromWeekStart(weekStart, offset) {
+  const date = new Date(`${weekStart || currentMondayISO()}T12:00:00`);
+  date.setDate(date.getDate() + Number(offset || 0));
+  return date.toISOString().slice(0, 10);
+}
+
+function normalizeKey(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/Ã‡/g, "C")
+    .replace(/Ã/g, "A")
+    .replace(/[^A-Z0-9]+/gi, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function clearScheduleImport() {
+  state.scheduleImport = { status: "idle", fileName: "", message: "", rows: [], rawText: "", weekStart: currentMondayISO() };
+  render();
+}
+
+async function commitScheduleImport() {
+  const rows = state.scheduleImport.rows.filter((row) => row.ready && !isDuplicateImportedSchedule(row));
+  const duplicates = state.scheduleImport.rows.filter((row) => row.ready && isDuplicateImportedSchedule(row)).length;
+  if (!rows.length) return alert(duplicates ? "Todas as rotas prontas já existem na programação." : "Nenhuma rota pronta para lançar.");
+  if (!confirm(`Lançar ${rows.length} rota(s) na programação?${duplicates ? ` ${duplicates} duplicada(s) serão ignoradas.` : ""}`)) return;
+  let imported = 0;
+  for (const row of rows) {
+    await request("/api/weeklySchedules", {
+      method: "POST",
+      body: {
+        condoId: row.condoId,
+        condoName: row.condoName,
+        address: row.address,
+        date: row.date,
+        startTime: row.startTime,
+        endTime: row.endTime,
+        sellerIds: row.sellerIds,
+        sellerId: row.sellerIds[0] || "",
+        workArea: row.workArea,
+        accessMode: row.accessMode,
+        status: row.status,
+        followUpDays: row.followUpDays,
+        notes: `Importado do PDF ${state.scheduleImport.fileName || "Programação semanal"}`
+      }
+    });
+    imported += 1;
+  }
+  await loadAll();
+  state.scheduleImport = { status: "done", fileName: "", message: `${imported} rota(s) lançada(s). ${duplicates} duplicada(s) ignorada(s).`, rows: [], rawText: "", weekStart: currentMondayISO() };
+  render();
+}
+
+function isDuplicateImportedSchedule(row) {
+  const sellerKey = row.sellerIds.join(",");
+  return state.data.weeklySchedules.some((item) => {
+    const itemSellerIds = Array.isArray(item.sellerIds) && item.sellerIds.length ? item.sellerIds : [item.sellerId].filter(Boolean);
+    return String(item.date || "") === row.date
+      && String(item.condoId || "") === row.condoId
+      && String(item.startTime || "") === row.startTime
+      && itemSellerIds.join(",") === sellerKey;
+  });
 }
 
 async function removeItem(collection, id) {

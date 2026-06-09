@@ -853,6 +853,68 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
   padding: 12px;
 }
 .schedule-helper span { color: #7b6321; }
+.schedule-import-card {
+  margin-bottom: 16px;
+}
+.schedule-import-card .toolbar label:not(.file-button) {
+  min-width: 220px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.import-message {
+  margin: 0 0 12px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid rgba(201, 162, 39, .3);
+  background: rgba(201, 162, 39, .1);
+  color: var(--muted);
+  font-weight: 800;
+}
+.import-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.import-summary span {
+  display: grid;
+  gap: 3px;
+  min-height: 68px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.import-summary strong {
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.1;
+  text-transform: none;
+  word-break: break-word;
+}
+.import-issues {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #e2c76d;
+  border-radius: 10px;
+  background: #fff8e1;
+  color: #5f4610;
+  font-weight: 700;
+}
+.import-issues strong {
+  color: #4f3b0c;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: .04em;
+}
 .coverage-map {
   position: relative;
   min-height: 390px;
@@ -1184,6 +1246,10 @@ body[data-theme="dark"] .status.warn { background: #342815; color: #f3d889; }
 body[data-theme="dark"] .status.danger { background: #3b1614; color: #ffb7ae; }
 body[data-theme="dark"] .schedule-helper { background: #211b10; color: #f7e6b1; border-color: #725c20; }
 body[data-theme="dark"] .schedule-helper span { color: #d8c586; }
+body[data-theme="dark"] .import-summary span { background: #111923; }
+body[data-theme="dark"] .import-message { background: #211b10; border-color: #725c20; color: #f7e6b1; }
+body[data-theme="dark"] .import-issues { background: #211b10; border-color: #725c20; color: #f7e6b1; }
+body[data-theme="dark"] .import-issues strong { color: #f3d889; }
 body[data-theme="dark"] .coverage-map {
   background:
     linear-gradient(90deg, rgba(214, 173, 79, .08) 1px, transparent 1px),

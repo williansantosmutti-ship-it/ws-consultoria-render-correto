@@ -216,7 +216,7 @@ function serveStatic(req, res) {
   if (!filePath.startsWith(PUBLIC_DIR)) return send(res, 403, "Acesso negado", "text/plain");
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) return send(res, 404, "Nao encontrado", "text/plain");
   const ext = path.extname(filePath).toLowerCase();
-  const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json" };
+  const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".mjs": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json" };
   send(res, 200, fs.readFileSync(filePath), types[ext] || "application/octet-stream");
 }
 
