@@ -1899,7 +1899,13 @@ function parseWeeklyScheduleText(text, weekStart = currentMondayISO()) {
   lines.forEach((line) => {
     const dayIndex = detectWeekday(line);
     if (dayIndex >= 0 && !isScheduleImportHeader(line)) {
-      pendingDay = dayIndex;
+      if (current) {
+        current.dayIndex = dayIndex;
+        const routeLine = stripWeekdayFromScheduleLine(line);
+        if (routeLine && !ignoreScheduleImportLine(routeLine)) current.lines.push(routeLine);
+      } else {
+        pendingDay = dayIndex;
+      }
       return;
     }
     if (isScheduleImportHeader(line)) {
@@ -1910,7 +1916,18 @@ function parseWeeklyScheduleText(text, weekStart = currentMondayISO()) {
     }
     if (current) current.lines.push(line);
   });
-  return blocks.flatMap((block) => block.lines.map((line) => parseScheduleImportLine(line)).filter(Boolean).map((row) => resolveScheduleImportRow(row, block.dayIndex, weekStart)));
+  const rows = [];
+  blocks.forEach((block) => {
+    const parsedRows = block.lines
+      .flatMap(splitScheduleImportLine)
+      .map((line) => parseScheduleImportLine(line))
+      .filter(Boolean);
+    const rowsPerDay = estimateScheduleRowsPerDay(parsedRows);
+    parsedRows.forEach((row, index) => {
+      rows.push(resolveScheduleImportRow(row, block.dayIndex + Math.floor(index / rowsPerDay), weekStart));
+    });
+  });
+  return rows;
 }
 
 function cleanScheduleLine(value) {
@@ -1924,6 +1941,56 @@ function cleanScheduleLine(value) {
 function isScheduleImportHeader(line) {
   const value = normalizeKey(line);
   return value.includes("DIA") && value.includes("CONSULTOR") && !value.includes("ATIVIDADE");
+}
+
+function stripWeekdayFromScheduleLine(line) {
+  const labels = [
+    "SEGUNDA-FEIRA", "SEGUNDA FEIRA", "SEGUNDA",
+    "TERCA-FEIRA", "TERCA FEIRA", "TERCA",
+    "TERÇA-FEIRA", "TERÇA FEIRA", "TERÇA",
+    "QUARTA-FEIRA", "QUARTA FEIRA", "QUARTA",
+    "QUINTA-FEIRA", "QUINTA FEIRA", "QUINTA",
+    "SEXTA-FEIRA", "SEXTA FEIRA", "SEXTA",
+    "SABADO", "SÁBADO"
+  ];
+  let text = ` ${line} `;
+  labels.forEach((label) => {
+    text = text.replace(new RegExp(`\\b${escapeRegExp(label)}\\b`, "gi"), " ");
+  });
+  const sellers = [...new Set(scheduleSellerAliases().map((alias) => alias.label).filter(Boolean))]
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp);
+  if (sellers.length) {
+    const match = text.match(new RegExp(`(?:^|\\s)(?:${sellers.join("|")})(?:\\s|$)`, "i"));
+    if (match) {
+      const sellerStart = match.index + (match[0].startsWith(" ") ? 1 : 0);
+      if (sellerStart > 0 && detectWeekday(text.slice(0, sellerStart)) >= 0) text = text.slice(sellerStart);
+    }
+  }
+  return cleanScheduleLine(text);
+}
+
+function splitScheduleImportLine(line) {
+  const text = cleanScheduleLine(line);
+  if (!text || isScheduleImportHeader(text) || ignoreScheduleImportLine(text)) return [text];
+  const labels = [...new Set(scheduleSellerAliases().map((alias) => alias.label).filter(Boolean))]
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp);
+  if (!labels.length) return [text];
+  const chunks = text.split(new RegExp(`\\s+(?=(?:${labels.join("|")})(?:\\s|$))`, "gi")).map(cleanScheduleLine).filter(Boolean);
+  return chunks.length ? chunks : [text];
+}
+
+function estimateScheduleRowsPerDay(rows) {
+  const seen = new Set();
+  for (let index = 0; index < rows.length; index += 1) {
+    const key = normalizeKey(rows[index]?.consultantText);
+    if (!key) continue;
+    if (seen.has(key) && index > 0) return Math.max(1, index);
+    seen.add(key);
+  }
+  const activeSellers = state.data.sellers.filter((seller) => String(seller.status || "Ativo") !== "Inativo").length;
+  return Math.max(1, Math.min(activeSellers || 5, 5));
 }
 
 function parseScheduleImportLine(line) {
@@ -2122,7 +2189,15 @@ function importWeekdays() {
 
 function detectWeekday(line) {
   const value = normalizeKey(line);
-  return importWeekdays().findIndex((day) => value.includes(normalizeKey(day.label)));
+  const aliases = [
+    ["SEGUNDA FEIRA", "SEGUNDA"],
+    ["TERCA FEIRA", "TERCA", "TER A FEIRA", "TER A"],
+    ["QUARTA FEIRA", "QUARTA"],
+    ["QUINTA FEIRA", "QUINTA"],
+    ["SEXTA FEIRA", "SEXTA"],
+    ["SABADO", "S BADO"]
+  ];
+  return aliases.findIndex((dayAliases) => dayAliases.some((alias) => value.includes(alias)));
 }
 
 function currentMondayISO(date = new Date()) {
@@ -3120,6 +3195,10 @@ function gcalDate(date) {
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 boot();
