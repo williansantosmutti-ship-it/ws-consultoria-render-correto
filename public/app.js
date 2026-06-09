@@ -1081,6 +1081,41 @@ function daysSince(date, now = Date.now()) {
   return Math.floor((now - new Date(date).getTime()) / 86400000);
 }
 
+function dateOnly(value) {
+  if (!value) return "";
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
+function dateOnlyTime(value) {
+  const iso = dateOnly(value);
+  return iso ? new Date(`${iso}T12:00:00`) : null;
+}
+
+function addDaysISO(value, days) {
+  const date = dateOnlyTime(value);
+  if (!date) return "";
+  date.setDate(date.getDate() + Number(days || 0));
+  return date.toISOString().slice(0, 10);
+}
+
+function daysBetweenISO(from, to) {
+  const start = dateOnlyTime(from);
+  const end = dateOnlyTime(to);
+  if (!start || !end) return 9999;
+  return Math.round((end - start) / 86400000);
+}
+
+function daysSinceISO(value) {
+  return daysBetweenISO(value, todayISO());
+}
+
+function daysUntilISO(value) {
+  return daysBetweenISO(todayISO(), value);
+}
+
 function table(headers, rows) {
   if (!rows.length) return `<div class="empty">Nenhum registro encontrado.</div>`;
   return `<div class="table-wrap"><table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell ?? ""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
@@ -1120,6 +1155,7 @@ function userActions(user) {
 
 function bindPageEvents() {
   document.querySelectorAll("[data-new]").forEach((button) => button.addEventListener("click", () => openForm(button.dataset.new)));
+  document.querySelectorAll("[data-schedule-condo]").forEach((button) => button.addEventListener("click", () => openScheduleForCondo(button.dataset.scheduleCondo)));
   document.querySelectorAll("[data-edit]").forEach((button) => button.addEventListener("click", () => {
     const [collection, id] = button.dataset.edit.split(":");
     openForm(collection, findById(collection, id));
@@ -1530,98 +1566,255 @@ function scheduleCard(item) {
 
 function scheduleHistoryView() {
   const rows = scheduleHistoryRows();
+  const allRows = scheduleHistoryRows({ ignoreQuery: true });
+  const reminders = allRows
+    .filter((row) => row.nextDate && row.nextDelta <= 7)
+    .sort((a, b) => a.nextDelta - b.nextDelta || b.priorityScore - a.priorityScore)
+    .slice(0, 8);
+  const lowActionRows = allRows
+    .filter((row) => row.priorityScore >= 45)
+    .sort((a, b) => b.priorityScore - a.priorityScore || b.daysWithoutAction - a.daysWithoutAction)
+    .slice(0, 8);
   return `
     <div class="history-toolbar">
       <input data-search placeholder="Buscar condomínio, endereço ou responsável..." value="${escapeHtml(state.query)}">
-      <p class="hint">Histórico gerado pelas programações salvas e visitas registradas. Use o status Concluída para consolidar a passagem realizada.</p>
+      <p class="hint">Veja a última ação por condomínio, retorno recomendado, última venda e locais com baixa movimentação comercial.</p>
     </div>
-    ${table(["Condomínio / endereço", "Última ida", "Quem visitou", "Área", "Próxima ida", "Histórico"], rows.map((row) => [
+    <div class="history-kpis">
+      ${historyKpi("Retorno vencido", allRows.filter((row) => row.overdue).length, "danger")}
+      ${historyKpi("Sem ação +30 dias", allRows.filter((row) => row.daysWithoutAction > 30).length, "warn")}
+      ${historyKpi("Sem ação +60 dias", allRows.filter((row) => row.daysWithoutAction > 60).length, "danger")}
+      ${historyKpi("Sem venda +60 dias", allRows.filter((row) => row.daysWithoutSale > 60).length, "warn")}
+    </div>
+    ${historyReminderPanel(reminders)}
+    ${historyPriorityPanel(lowActionRows)}
+    ${table(["Condomínio / endereço", "Última ação", "Última venda", "Lembrete", "Movimento comercial", "Ações"], rows.map((row) => [
       `${escapeHtml(row.condoName)}<small>${escapeHtml(row.address || "")}</small>`,
-      row.lastDate ? fmtDate(row.lastDate) : "-",
-      row.sellers || "-",
-      row.workArea || "-",
-      row.nextDate ? `${fmtDate(row.nextDate)}<small>${row.overdue ? "Retorno vencido" : "Retorno programado"}</small>` : "Programar primeira ida",
-      row.count
+      historyLastActionCell(row),
+      historyLastSaleCell(row),
+      historyReminderCell(row),
+      historyMovementCell(row),
+      historyRowActions(row)
     ]))}
   `;
 }
 
-function scheduleHistoryRows() {
+function historyKpi(label, value, tone = "") {
+  return `<section class="history-kpi ${tone}"><strong>${value}</strong><span>${escapeHtml(label)}</span></section>`;
+}
+
+function historyReminderPanel(rows) {
+  if (!rows.length) return "";
+  return `<section class="history-panel">
+    <div class="section-head"><h3>Lembretes de retorno</h3><span class="hint">Condomínios vencidos ou próximos de voltar</span></div>
+    <div class="history-card-grid">
+      ${rows.map(historyReminderCard).join("")}
+    </div>
+  </section>`;
+}
+
+function historyPriorityPanel(rows) {
+  if (!rows.length) return "";
+  return `<section class="history-panel">
+    <div class="section-head"><h3>Baixa ação comercial</h3><span class="hint">Sugestões para montar a próxima programação</span></div>
+    <div class="history-card-grid">
+      ${rows.map(historyPriorityCard).join("")}
+    </div>
+  </section>`;
+}
+
+function historyReminderCard(row) {
+  return `<article class="history-card ${row.overdue ? "danger" : ""}">
+    <div><strong>${escapeHtml(row.condoName)}</strong><span>${escapeHtml(row.reminderText)}</span></div>
+    <small>Última ação: ${row.lastDate ? fmtDate(row.lastDate) : "Nunca"}${row.lastSource ? ` | ${escapeHtml(row.lastSource)}` : ""}</small>
+    <small>${escapeHtml(row.sellers || "Sem responsável recente")}</small>
+    ${historyRowActions(row)}
+  </article>`;
+}
+
+function historyPriorityCard(row) {
+  return `<article class="history-card priority">
+    <div><strong>${escapeHtml(row.condoName)}</strong><span>${escapeHtml(row.priorityText)}</span></div>
+    <small>Última ação: ${row.lastDate ? fmtDate(row.lastDate) : "Nunca"} | ${row.actions30} ação(ões) em 30 dias</small>
+    <small>Última venda: ${row.lastSaleDate ? fmtDate(row.lastSaleDate) : "Sem venda registrada"} | ${row.sales60} venda(s) em 60 dias</small>
+    ${historyRowActions(row)}
+  </article>`;
+}
+
+function historyLastActionCell(row) {
+  if (!row.lastDate) return `Nunca<small>Programar primeira ida</small>`;
+  return `${fmtDate(row.lastDate)}<small>${escapeHtml(row.lastSource || "Ação")} | ${escapeHtml(row.sellers || "-")}</small>`;
+}
+
+function historyLastSaleCell(row) {
+  if (!row.lastSaleDate) return `Sem venda<small>${row.sales60} venda(s) em 60 dias</small>`;
+  return `${fmtDate(row.lastSaleDate)}<small>${row.sales30} venda(s) em 30 dias | ${row.sales60} em 60 dias</small>`;
+}
+
+function historyReminderCell(row) {
+  const tone = !row.lastDate ? "warn" : row.overdue ? "danger" : row.nextDelta <= 7 ? "warn" : "";
+  return `${status(row.reminderText, tone)}<small>${escapeHtml(row.priorityText)}</small>`;
+}
+
+function historyMovementCell(row) {
+  return `${row.actions30} ação(ões) em 30 dias<small>${row.actions60} em 60 dias | Histórico total: ${row.count}</small>`;
+}
+
+function historyRowActions(row) {
+  return `<div class="row-actions">
+    <button class="primary" data-schedule-condo="${escapeHtml(row.condoId)}">Programar</button>
+    ${row.address ? `<button class="secondary" data-map="${escapeHtml(row.address)}">Mapa</button>` : ""}
+  </div>`;
+}
+
+function scheduleHistoryRows(options = {}) {
   const byCondo = new Map();
   state.data.condos.forEach((condo) => {
-    byCondo.set(condo.id, {
-      condoId: condo.id,
-      condoName: condo.name,
-      address: condo.address,
-      lastDate: "",
-      nextDate: "",
-      sellers: "",
-      workArea: "",
-      overdue: false,
-      count: 0
-    });
+    byCondo.set(condo.id, emptyHistoryRow(condo.id, condo.name, condo.address));
   });
-  state.data.weeklySchedules.forEach((item) => {
-    if (!item.condoId) return;
-    const condo = findById("condos", item.condoId);
-    const row = byCondo.get(item.condoId) || {
-      condoId: item.condoId,
-      condoName: item.condoName || "Condomínio",
-      address: item.address || condo?.address || "",
-      lastDate: "",
-      nextDate: "",
-      sellers: "",
-      workArea: "",
-      overdue: false,
-      count: 0
-    };
+  const ensureRow = (condoId, fallback = {}) => {
+    const condo = findById("condos", condoId);
+    if (!byCondo.has(condoId)) byCondo.set(condoId, emptyHistoryRow(condoId, fallback.condoName || condo?.name || "Condomínio", fallback.address || condo?.address || ""));
+    return byCondo.get(condoId);
+  };
+  const addAction = (condoId, action) => {
+    if (!condoId || !action.date) return;
+    const row = ensureRow(condoId, action);
+    const actionDate = dateOnly(action.date);
+    const days = daysSinceISO(actionDate);
     row.count += 1;
-    const itemDate = item.date ? `${item.date}T12:00:00` : "";
-    if (itemDate && (!row.lastDate || new Date(itemDate) > new Date(row.lastDate))) {
-      const next = new Date(itemDate);
-      next.setDate(next.getDate() + Number(item.followUpDays || 30));
-      row.lastDate = itemDate;
-      row.nextDate = next.toISOString();
-      row.sellers = scheduleSellers(item);
-      row.workArea = item.workArea || item.accessMode || "";
-      row.overdue = next < new Date();
+    if (days <= 30) row.actions30 += 1;
+    if (days <= 60) row.actions60 += 1;
+    if (!row.lastDate || actionDate > row.lastDate) {
+      row.lastDate = actionDate;
+      row.lastSource = action.source || "Ação";
+      row.nextDate = action.nextDate ? dateOnly(action.nextDate) : addDaysISO(actionDate, Number(action.followUpDays || 30));
+      row.sellers = action.sellers || "";
+      row.workArea = action.workArea || "";
     }
-    byCondo.set(item.condoId, row);
-  });
+  };
+  state.data.weeklySchedules.forEach((item) => addAction(item.condoId, {
+    date: item.date,
+    condoName: item.condoName,
+    address: item.address || findById("condos", item.condoId)?.address || "",
+    source: "Programação",
+    sellers: scheduleSellers(item),
+    workArea: item.workArea || item.accessMode || "",
+    followUpDays: item.followUpDays || 30
+  }));
   state.data.visits.forEach((visit) => {
-    if (!visit.condoId || !visit.date) return;
     const condo = findById("condos", visit.condoId);
-    const row = byCondo.get(visit.condoId) || {
-      condoId: visit.condoId,
+    addAction(visit.condoId, {
+      date: visit.date,
       condoName: condo?.name || "Condomínio",
       address: condo?.address || "",
-      lastDate: "",
-      nextDate: "",
-      sellers: "",
-      workArea: "",
-      overdue: false,
-      count: 0
-    };
-    row.count += 1;
-    if (!row.lastDate || new Date(visit.date) > new Date(row.lastDate)) {
-      const next = new Date(visit.date);
-      next.setDate(next.getDate() + 30);
-      row.lastDate = visit.date;
-      row.nextDate = next.toISOString();
-      row.sellers = "Visita registrada";
-      row.workArea = visit.purpose || "";
-      row.overdue = next < new Date();
-    }
-    byCondo.set(visit.condoId, row);
+      source: "Relacionamento",
+      sellers: findById("sellers", visit.sellerId)?.name || visit.responsible || "Visita registrada",
+      workArea: visit.purpose || visit.status || "",
+      nextDate: visit.nextVisit,
+      followUpDays: 30
+    });
+  });
+  state.data.sales.forEach((sale) => {
+    if (!sale.condoId || !sale.date) return;
+    const condo = findById("condos", sale.condoId);
+    const row = ensureRow(sale.condoId, { condoName: sale.condoName || condo?.name, address: condo?.address || "" });
+    const saleDate = dateOnly(sale.date);
+    const days = daysSinceISO(saleDate);
+    if (days <= 30) row.sales30 += 1;
+    if (days <= 60) row.sales60 += 1;
+    if (!row.lastSaleDate || saleDate > row.lastSaleDate) row.lastSaleDate = saleDate;
+  });
+  byCondo.forEach((row) => {
+    row.daysWithoutAction = row.lastDate ? daysSinceISO(row.lastDate) : 9999;
+    row.daysWithoutSale = row.lastSaleDate ? daysSinceISO(row.lastSaleDate) : 9999;
+    row.nextDelta = row.nextDate ? daysUntilISO(row.nextDate) : -9999;
+    row.overdue = Boolean(row.lastDate) && row.nextDelta < 0;
+    row.reminderText = historyReminderText(row);
+    row.priorityText = historyPriorityText(row);
+    row.priorityScore = historyPriorityScore(row);
   });
   const q = state.query.trim().toLowerCase();
   return [...byCondo.values()]
-    .filter((row) => !q || JSON.stringify(row).toLowerCase().includes(q))
+    .filter((row) => options.ignoreQuery || !q || JSON.stringify(row).toLowerCase().includes(q))
     .sort((a, b) => {
-      if (!a.lastDate && b.lastDate) return 1;
-      if (a.lastDate && !b.lastDate) return -1;
+      if (b.priorityScore !== a.priorityScore) return b.priorityScore - a.priorityScore;
       return String(a.nextDate || "9999").localeCompare(String(b.nextDate || "9999"));
     });
+}
+
+function emptyHistoryRow(condoId, condoName, address) {
+  return {
+    condoId,
+    condoName,
+    address,
+    lastDate: "",
+    lastSource: "",
+    nextDate: "",
+    sellers: "",
+    workArea: "",
+    overdue: false,
+    count: 0,
+    actions30: 0,
+    actions60: 0,
+    lastSaleDate: "",
+    sales30: 0,
+    sales60: 0,
+    daysWithoutAction: 9999,
+    daysWithoutSale: 9999,
+    nextDelta: 9999,
+    priorityScore: 0,
+    priorityText: "",
+    reminderText: ""
+  };
+}
+
+function historyPriorityScore(row) {
+  let score = 0;
+  if (!row.lastDate) score += 80;
+  if (row.overdue) score += 35;
+  if (row.daysWithoutAction > 60) score += 35;
+  else if (row.daysWithoutAction > 30) score += 20;
+  if (!row.actions30) score += 12;
+  if (row.daysWithoutSale > 60) score += 16;
+  if (!row.sales60) score += 10;
+  return score;
+}
+
+function historyReminderText(row) {
+  if (!row.lastDate) return "Primeira ação pendente";
+  if (!row.nextDate) return "Definir retorno";
+  if (row.nextDelta < 0) return `Vencido há ${Math.abs(row.nextDelta)} dia(s)`;
+  if (row.nextDelta === 0) return "Retorno hoje";
+  return `Retorno em ${row.nextDelta} dia(s)`;
+}
+
+function historyPriorityText(row) {
+  if (!row.lastDate) return "Sem histórico de ação";
+  if (row.daysWithoutAction > 60) return `Sem ação há ${row.daysWithoutAction} dia(s)`;
+  if (row.daysWithoutSale > 60) return `Sem venda há ${row.daysWithoutSale} dia(s)`;
+  if (!row.actions30) return "Sem ação nos últimos 30 dias";
+  return "Acompanhar recorrência";
+}
+
+function openScheduleForCondo(condoId) {
+  const row = scheduleHistoryRows({ ignoreQuery: true }).find((item) => item.condoId === condoId);
+  const condo = findById("condos", condoId);
+  if (!condo && !row) return alert("Condomínio não localizado para programar.");
+  const targetDate = row?.nextDate && row.nextDelta >= 0 ? row.nextDate : todayISO();
+  openForm("weeklySchedules", {
+    condoId,
+    condoName: condo?.name || row?.condoName || "",
+    address: condo?.address || row?.address || "",
+    date: targetDate,
+    startTime: "09:00",
+    endTime: "12:00",
+    workArea: "Ação comercial / relacionamento",
+    accessMode: "Pode entrar",
+    status: "Programada",
+    followUpDays: 30,
+    notes: row ? `${row.reminderText}. ${row.priorityText}. Última ação: ${row.lastDate ? fmtDate(row.lastDate) : "sem histórico"}.` : "Programação criada a partir do histórico."
+  });
 }
 
 function scheduleActions(item) {
@@ -1631,7 +1824,7 @@ function scheduleActions(item) {
 }
 
 function scheduleSellers(item) {
-  const ids = Array.isArray(item.sellerIds) && item.sellerIds.length ? item.sellerIds : [item.sellerId].filter(Boolean);
+  const ids = scheduleSellerIds(item);
   return ids.map((id) => findById("sellers", id)?.name).filter(Boolean).join(", ");
 }
 

@@ -1252,6 +1252,64 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
   align-items: center;
   margin-bottom: 12px;
 }
+.history-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.history-kpi {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--panel);
+  display: grid;
+  gap: 4px;
+  box-shadow: 0 10px 22px rgba(21, 26, 22, .05);
+}
+.history-kpi strong { font-size: 24px; line-height: 1; color: var(--primary-dark); }
+.history-kpi span { color: var(--muted); font-size: 12px; font-weight: 900; text-transform: uppercase; }
+.history-kpi.warn { border-color: rgba(201, 162, 39, .45); background: #fff8e8; }
+.history-kpi.danger { border-color: rgba(184, 53, 44, .32); background: #fff1ef; }
+.history-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  background: var(--surface);
+  margin-bottom: 12px;
+}
+.history-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 10px;
+}
+.history-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+  background: var(--panel);
+}
+.history-card > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.history-card strong { color: var(--primary-dark); }
+.history-card span {
+  justify-self: start;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: #eef3ef;
+  color: var(--primary-dark);
+  font-size: 11px;
+  font-weight: 900;
+}
+.history-card small { color: var(--muted); font-weight: 700; line-height: 1.35; }
+.history-card.danger { border-color: rgba(184, 53, 44, .34); background: #fff7f6; }
+.history-card.danger span { background: #ffe0dc; color: #8e251d; }
+.history-card.priority { border-color: rgba(201, 162, 39, .45); background: #fffaf0; }
+.history-card.priority span { background: #fff0c7; color: #8b650e; }
 .bars { display: grid; gap: 10px; }
 .bar-row {
   display: grid;
@@ -1346,6 +1404,18 @@ body[data-theme="dark"] .week-column { background: #0e151d; }
 body[data-theme="dark"] .week-column header { background: rgba(214, 173, 79, .1); }
 body[data-theme="dark"] .schedule-card { background: #111923; }
 body[data-theme="dark"] .schedule-card span { background: #342815; color: #f3d889; }
+body[data-theme="dark"] .history-panel,
+body[data-theme="dark"] .history-kpi,
+body[data-theme="dark"] .history-card { background: #111923; }
+body[data-theme="dark"] .history-kpi.warn,
+body[data-theme="dark"] .history-card.priority { background: #211b10; border-color: #725c20; }
+body[data-theme="dark"] .history-kpi.danger,
+body[data-theme="dark"] .history-card.danger { background: #211413; border-color: #6f2d27; }
+body[data-theme="dark"] .history-kpi strong,
+body[data-theme="dark"] .history-card strong { color: #f7f1e3; }
+body[data-theme="dark"] .history-card span { background: #21332d; color: #dbe7e3; }
+body[data-theme="dark"] .history-card.priority span { background: #342815; color: #f3d889; }
+body[data-theme="dark"] .history-card.danger span { background: #3b1614; color: #ffb7ae; }
 .calendar-day.today { outline: 2px solid var(--accent); outline-offset: -2px; }
 .calendar-day.muted-day { background: #f8f6f0; color: #9a9488; }
 .calendar-event {
@@ -1418,6 +1488,7 @@ body[data-theme="dark"] .schedule-card span { background: #342815; color: #f3d88
   .calendar-day { min-height: auto; }
   .weekly-board { grid-template-columns: 1fr; }
   .history-toolbar { grid-template-columns: 1fr; }
+  .history-kpis, .history-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .map-layout { grid-template-columns: 1fr; }
   .google-map-frame { height: 360px; }
   .bar-row { grid-template-columns: 1fr; }
@@ -1445,6 +1516,7 @@ body[data-theme="dark"] .schedule-card span { background: #342815; color: #f3d88
   .google-map-frame { height: 300px; }
   .card, .chart-card { padding: 14px; }
   .toolbar button, .toolbar input, .toolbar select, .file-button { width: 100%; }
+  .history-kpis, .history-card-grid { grid-template-columns: 1fr; }
   .report-area-btn { min-height: 86px; }
   .report-preview .report-page { padding: 20px; }
   table { min-width: 720px; }
