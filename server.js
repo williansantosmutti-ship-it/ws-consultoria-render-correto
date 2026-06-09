@@ -84,11 +84,17 @@ function defaultStore() {
 }
 
 function seller(name) {
+  const emails = {
+    "Ivan Carvalho": "ivan.carvalho@usetelecom.com.br",
+    "Isis Silva": "isis.santos@bahiainternet.com.br",
+    "Bruna Marcela": "bruna.silva@usetelecom.com.br",
+    "Adriele Santos": "adriele.silva@usetelecom.com.br"
+  };
   return {
     id: uid(),
     name,
     phone: "",
-    email: "",
+    email: emails[name] || "",
     status: "Ativo",
     goal: 0,
     createdAt: new Date().toISOString()

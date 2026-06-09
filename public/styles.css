@@ -898,6 +898,83 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
   text-transform: none;
   word-break: break-word;
 }
+.import-sheet {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.import-day {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.import-day.has-issues {
+  border-color: rgba(180, 35, 24, .28);
+}
+.import-day header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--primary);
+  color: #fff;
+}
+.import-day header strong {
+  font-size: 13px;
+  text-transform: uppercase;
+}
+.import-day header span {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 900;
+}
+.import-day-body {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+.import-route {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 9px;
+  background: var(--panel);
+}
+.import-route.review {
+  border-left-color: var(--danger);
+  background: #fff8f7;
+}
+.import-route div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+.import-route strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+.import-route span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.import-route p {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 900;
+  line-height: 1.25;
+}
+.import-route small {
+  color: var(--muted);
+  font-weight: 800;
+}
 .import-issues {
   display: grid;
   gap: 7px;
@@ -1247,6 +1324,9 @@ body[data-theme="dark"] .status.danger { background: #3b1614; color: #ffb7ae; }
 body[data-theme="dark"] .schedule-helper { background: #211b10; color: #f7e6b1; border-color: #725c20; }
 body[data-theme="dark"] .schedule-helper span { color: #d8c586; }
 body[data-theme="dark"] .import-summary span { background: #111923; }
+body[data-theme="dark"] .import-day { background: #0e151d; }
+body[data-theme="dark"] .import-route { background: #111923; }
+body[data-theme="dark"] .import-route.review { background: #211413; }
 body[data-theme="dark"] .import-message { background: #211b10; border-color: #725c20; color: #f7e6b1; }
 body[data-theme="dark"] .import-issues { background: #211b10; border-color: #725c20; color: #f7e6b1; }
 body[data-theme="dark"] .import-issues strong { color: #f3d889; }
