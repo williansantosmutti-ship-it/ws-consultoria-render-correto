@@ -12,6 +12,7 @@ const state = {
   reportOptions: {},
   scheduleView: "week",
   scheduleWeekStart: "",
+  selectedSchedules: new Set(),
   scheduleImport: {
     status: "idle",
     fileName: "",
@@ -568,8 +569,8 @@ function condoVisitSummary(condoId) {
 
 function weeklySchedules() {
   const rows = filteredWithPage("weeklySchedules").sort((a, b) => `${a.date || ""}${a.startTime || ""}`.localeCompare(`${b.date || ""}${b.startTime || ""}`));
-  const selectedWeekStart = state.scheduleWeekStart || currentMondayISO();
-  const selectedPeriod = schedulePeriodFromDate(selectedWeekStart);
+  const filters = state.filters.weeklySchedules || {};
+  const selectedPeriod = scheduleBoardPeriod(filters);
   const boardRows = rows.filter((item) => String(item.date || "") >= selectedPeriod.from && String(item.date || "") <= selectedPeriod.to);
   const today = todayISO();
   const weekEnd = new Date();
@@ -599,17 +600,13 @@ function weeklySchedules() {
             ${scheduleSegment("week", "Semana operacional")}
             ${scheduleSegment("history", "Histórico de visitas")}
           </div>
-          <div class="week-picker">
-            <button class="secondary" type="button" data-schedule-week-nav="-7">Anterior</button>
-            <label>Semana<input type="date" data-schedule-week value="${escapeHtml(selectedWeekStart)}"></label>
-            <button class="secondary" type="button" data-schedule-week-nav="7">Próxima</button>
-          </div>
+          ${state.scheduleView === "week" ? `<button class="secondary" data-select-visible-schedules>Selecionar visíveis</button><button class="danger soft" data-delete-selected-schedules ${state.selectedSchedules.size ? "" : "disabled"}>Excluir selecionadas (${state.selectedSchedules.size})</button>` : ""}
           <button class="secondary" data-copy-schedule>Copiar programação</button>
           <button class="secondary" data-download-schedule>Baixar PDF</button>
           <button class="primary" data-new="weeklySchedules">Adicionar rota</button>
         </div>
       </div>
-      ${state.scheduleView === "history" ? scheduleHistoryView() : weeklyBoard(boardRows, selectedWeekStart)}
+      ${state.scheduleView === "history" ? scheduleHistoryView() : weeklyBoard(boardRows, selectedPeriod.from)}
     </section>`;
 }
 
@@ -645,7 +642,7 @@ function scheduleImportPanel() {
 
 function scheduleImportSpreadsheet(rows) {
   const byDay = new Map(importWeekdays().map((day, index) => [index, []]));
-  rows.forEach((row) => byDay.get(row.dayIndex)?.push(row));
+  rows.forEach((row, index) => byDay.get(row.dayIndex)?.push({ ...row, importIndex: index }));
   return `<div class="import-sheet">
     ${[...byDay.entries()].map(([dayIndex, dayRows]) => `<section class="import-day ${dayRows.some((row) => !row.ready) ? "has-issues" : ""}">
       <header>
@@ -667,7 +664,37 @@ function scheduleImportCard(row) {
     </div>
     <p>${escapeHtml(row.condoText || "Sem condomínio")}</p>
     <small>${escapeHtml(row.condoName || row.issue || "Revisar cadastro")}</small>
+    ${row.condoId ? "" : scheduleImportCondoFix(row)}
   </article>`;
+}
+
+function scheduleImportCondoFix(row) {
+  const suggestions = condoImportSuggestions(row.condoText);
+  return `<label class="import-fix">Corrigir condomínio
+    <select data-import-condo="${row.importIndex}">
+      <option value="">Selecionar condomínio cadastrado</option>
+      ${suggestions.map((condo) => `<option value="${condo.id}">${escapeHtml(condo.name)}${condo.neighborhood ? ` - ${escapeHtml(condo.neighborhood)}` : ""}</option>`).join("")}
+    </select>
+  </label>`;
+}
+
+function condoImportSuggestions(text) {
+  const q = normalizeKey(text);
+  const scored = state.data.condos.map((condo) => {
+    const haystack = normalizeKey([condo.name, condo.neighborhood, condo.address, condo.city].filter(Boolean).join(" "));
+    const score = q && haystack.includes(q) ? 100 : similarityScore(q, haystack);
+    return { condo, score };
+  }).sort((a, b) => b.score - a.score || String(a.condo.name || "").localeCompare(String(b.condo.name || "")));
+  const chosen = scored.filter((item) => item.score > 15).slice(0, 18).map((item) => item.condo);
+  return chosen.length ? chosen : state.data.condos.slice(0, 18);
+}
+
+function similarityScore(query, target) {
+  const tokens = normalizeKey(query).split(" ").filter((token) => token.length > 2);
+  if (!tokens.length) return 0;
+  const haystack = normalizeKey(target);
+  const hits = tokens.filter((token) => haystack.includes(token)).length;
+  return Math.round((hits / tokens.length) * 100);
 }
 
 function scheduleImportIssues(rows) {
@@ -891,6 +918,7 @@ function reports() {
         </div>
       </div>
     </section>
+    ${reportCharts(filter)}
     ${reportPreview()}`;
 }
 
@@ -999,11 +1027,8 @@ function filterPanel(page, fields) {
   const open = state.filterOpen.has(page);
   return `<section class="filter-card ${open ? "open" : ""}">
     <div class="filter-head compact">
-      <button class="primary" type="button" data-filter-toggle="${page}">Filtro</button>
-      <div class="filter-actions">
-        <small>${active ? `${active} filtro(s) ativo(s)` : "Sem filtros ativos"}</small>
-        <button class="secondary" type="button" data-filter-clear="${page}">Limpar</button>
-      </div>
+      <button class="filter-toggle-btn" type="button" data-filter-toggle="${page}">Filtro${active ? `<span>${active}</span>` : ""}</button>
+      ${open ? `<button class="secondary compact-btn" type="button" data-filter-clear="${page}">Limpar</button>` : ""}
     </div>
     <div class="filter-panel">
       <div class="filter-grid">${fields.join("")}</div>
@@ -1235,6 +1260,12 @@ function bindPageEvents() {
     openForm(collection, findById(collection, id));
   }));
   document.querySelectorAll("[data-delete]").forEach((button) => button.addEventListener("click", () => removeItem(...button.dataset.delete.split(":"))));
+  document.querySelectorAll("[data-schedule-select]").forEach((input) => input.addEventListener("change", () => {
+    input.checked ? state.selectedSchedules.add(input.dataset.scheduleSelect) : state.selectedSchedules.delete(input.dataset.scheduleSelect);
+    render();
+  }));
+  $("[data-select-visible-schedules]")?.addEventListener("click", selectVisibleSchedules);
+  $("[data-delete-selected-schedules]")?.addEventListener("click", removeSelectedSchedules);
   document.querySelectorAll("[data-toggle-user]").forEach((button) => button.addEventListener("click", () => toggleUser(...button.dataset.toggleUser.split(":"))));
   document.querySelectorAll("[data-page-jump]").forEach((button) => button.addEventListener("click", () => {
     goToPage(button.dataset.pageJump);
@@ -1268,6 +1299,7 @@ function bindPageEvents() {
   document.querySelectorAll("[data-filter]").forEach((input) => input.addEventListener("input", () => {
     const [page, key] = input.dataset.filter.split(":");
     state.filters[page] = { ...(state.filters[page] || {}), [key]: input.value };
+    if (page === "weeklySchedules" && (key === "from" || key === "to") && input.value) state.scheduleWeekStart = currentMondayISO(new Date(`${input.value}T12:00:00`));
     render();
   }));
   document.querySelectorAll("[data-filter-toggle]").forEach((button) => button.addEventListener("click", () => {
@@ -1286,16 +1318,6 @@ function bindPageEvents() {
   }));
   document.querySelectorAll("[data-schedule-view]").forEach((button) => button.addEventListener("click", () => {
     state.scheduleView = button.dataset.scheduleView;
-    render();
-  }));
-  $("[data-schedule-week]")?.addEventListener("change", (event) => {
-    state.scheduleWeekStart = currentMondayISO(new Date(`${event.target.value || todayISO()}T12:00:00`));
-    render();
-  });
-  document.querySelectorAll("[data-schedule-week-nav]").forEach((button) => button.addEventListener("click", () => {
-    const base = new Date(`${state.scheduleWeekStart || currentMondayISO()}T12:00:00`);
-    base.setDate(base.getDate() + Number(button.dataset.scheduleWeekNav || 0));
-    state.scheduleWeekStart = currentMondayISO(base);
     render();
   }));
   $("[data-report-filter]")?.addEventListener("change", (event) => {
@@ -1330,6 +1352,7 @@ function bindPageEvents() {
   });
   $("[data-clear-schedule-import]")?.addEventListener("click", clearScheduleImport);
   $("[data-commit-schedule-import]")?.addEventListener("click", commitScheduleImport);
+  document.querySelectorAll("[data-import-condo]").forEach((selectEl) => selectEl.addEventListener("change", () => applyImportCondo(selectEl.dataset.importCondo, selectEl.value)));
   $("[data-map-files]")?.addEventListener("change", importMapFiles);
   $("[data-clear-map-files]")?.addEventListener("click", () => {
     mapState.files = [];
@@ -1630,7 +1653,9 @@ function weeklyBoard(rows, weekStart = currentMondayISO()) {
 function scheduleCard(item) {
   const condo = findById("condos", item.condoId);
   const info = condoScheduleInfo(item.condoId, item.date);
+  const checked = state.selectedSchedules.has(item.id);
   return `<article class="schedule-card">
+    <label class="schedule-select"><input type="checkbox" data-schedule-select="${item.id}" ${checked ? "checked" : ""}><span>Selecionar</span></label>
     <div>
       <strong>${escapeHtml(condo?.name || item.condoName || "Condomínio")}</strong>
       <small>${item.startTime || "-"} às ${item.endTime || "-"} | ${escapeHtml(scheduleSellers(item) || "Equipe")}</small>
@@ -2505,6 +2530,17 @@ function dateFromWeekStart(weekStart, offset) {
   return date.toISOString().slice(0, 10);
 }
 
+function scheduleBoardPeriod(filters = {}) {
+  if (filters.from || filters.to) {
+    const anchor = filters.from || filters.to || todayISO();
+    const from = filters.from || currentMondayISO(new Date(`${anchor}T12:00:00`));
+    const to = filters.to || dateFromWeekStart(from, 5);
+    const selected = normalizeSchedulePeriod({ from, to });
+    if (selected) return selected;
+  }
+  return schedulePeriodFromDate(state.scheduleWeekStart || todayISO());
+}
+
 function schedulePeriodFromDate(value = todayISO()) {
   const base = new Date(`${String(value || todayISO()).slice(0, 10)}T12:00:00`);
   const diff = base.getDay() === 0 ? -6 : 1 - base.getDay();
@@ -2539,6 +2575,28 @@ function normalizeKey(value) {
 
 function clearScheduleImport() {
   state.scheduleImport = { status: "idle", fileName: "", message: "", rows: [], rawText: "", weekStart: currentMondayISO() };
+  render();
+}
+
+function applyImportCondo(index, condoId) {
+  const rowIndex = Number(index);
+  const condo = findById("condos", condoId);
+  if (!condo || !state.scheduleImport.rows[rowIndex]) return;
+  const row = state.scheduleImport.rows[rowIndex];
+  const issue = [
+    row.sellerIds?.length ? "" : "consultor não cadastrado",
+    ""
+  ].filter(Boolean).join("; ");
+  state.scheduleImport.rows[rowIndex] = {
+    ...row,
+    condoId: condo.id,
+    condoName: condo.name || "",
+    address: condo.address || "",
+    issue,
+    ready: Boolean(row.sellerIds?.length && condo.id)
+  };
+  const ready = state.scheduleImport.rows.filter((item) => item.ready).length;
+  state.scheduleImport.message = `${state.scheduleImport.rows.length} linha(s) identificada(s). ${ready} pronta(s) para lançar.`;
   render();
 }
 
@@ -2595,6 +2653,18 @@ async function removeItem(collection, id) {
   render();
 }
 
+async function removeSelectedSchedules() {
+  const ids = [...state.selectedSchedules].filter(Boolean);
+  if (!ids.length) return;
+  if (!confirm(`Deseja excluir ${ids.length} programação(ões) selecionada(s)?`)) return;
+  for (const id of ids) {
+    await request(`/api/weeklySchedules/${id}`, { method: "DELETE" });
+  }
+  state.selectedSchedules.clear();
+  await loadAll();
+  render();
+}
+
 async function toggleUser(id, active) {
   await request(`/api/users/${id}`, { method: "PUT", body: { active: active === "true" } });
   await loadAll();
@@ -2611,6 +2681,14 @@ function dismissAlert(key) {
 function closeToast(key) {
   state.activeToasts.delete(key);
   renderAlerts();
+}
+
+function selectVisibleSchedules() {
+  const ids = [...document.querySelectorAll("[data-schedule-select]")].map((input) => input.dataset.scheduleSelect).filter(Boolean);
+  if (!ids.length) return;
+  const allSelected = ids.every((id) => state.selectedSchedules.has(id));
+  ids.forEach((id) => allSelected ? state.selectedSchedules.delete(id) : state.selectedSchedules.add(id));
+  render();
 }
 
 function openCalendar(ref) {
@@ -2747,6 +2825,132 @@ function reportAreaButton(area, active) {
     <strong>${escapeHtml(label)}</strong>
     <small>${escapeHtml(description)}</small>
   </button>`;
+}
+
+function reportCharts(filter = state.reportFilter) {
+  const data = reportChartData(filter);
+  return `<section class="card report-analytics">
+    <div class="section-head">
+      <div>
+        <h3>Leitura visual</h3>
+        <p class="hint">Gráficos dinâmicos da área selecionada para acompanhar tendência, volume e concentração.</p>
+      </div>
+    </div>
+    <div class="analytics-grid">
+      ${advancedBarChart(data.primaryTitle, data.primary)}
+      ${advancedDonutChart(data.secondaryTitle, data.secondary)}
+      ${advancedBarChart(data.tertiaryTitle, data.tertiary)}
+    </div>
+  </section>`;
+}
+
+function reportChartData(filter) {
+  if (filter === "vendas") {
+    const sales = visibleSalesRows();
+    return {
+      primaryTitle: "Ranking comercial",
+      primary: sellerRanking().slice(0, 6).map((row) => ({ label: row.name, value: row.count })),
+      secondaryTitle: "Tipo de venda",
+      secondary: counts(sales.map((sale) => ({ type: saleTypeLabel(sale) })), "type"),
+      tertiaryTitle: "Status das vendas",
+      tertiary: counts(sales.map((sale) => ({ status: saleStatusLabel(sale) })), "status")
+    };
+  }
+  if (filter === "programacao") {
+    const rows = weeklyScheduleRowsForReport({ respectQuery: false }).slice(0, 120);
+    const byDay = counts(rows.map((item) => ({ day: fmtDate(item.date) })), "day").slice(0, 8);
+    const sellerMap = new Map();
+    rows.forEach((item) => scheduleSellerNames(item).forEach((name) => sellerMap.set(name, (sellerMap.get(name) || 0) + 1)));
+    return {
+      primaryTitle: "Rotas por dia",
+      primary: byDay,
+      secondaryTitle: "Status da programação",
+      secondary: counts(rows, "status"),
+      tertiaryTitle: "Rotas por consultor",
+      tertiary: [...sellerMap.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8)
+    };
+  }
+  if (filter === "visitas") {
+    return {
+      primaryTitle: "Relacionamentos por status",
+      primary: counts(state.data.visits, "status").slice(0, 8),
+      secondaryTitle: "Potencial comercial",
+      secondary: counts(state.data.visits, "commercialPotential"),
+      tertiaryTitle: "Interesse na parceria",
+      tertiary: counts(state.data.visits, "partnershipInterest")
+    };
+  }
+  if (filter === "expansao") {
+    return {
+      primaryTitle: "Demandas por status",
+      primary: counts(state.data.expansions, "status").slice(0, 8),
+      secondaryTitle: "Tipo da demanda",
+      secondary: counts(state.data.expansions, "type"),
+      tertiaryTitle: "Responsáveis",
+      tertiary: counts(state.data.expansions.map((item) => ({ owner: findById("sellers", item.sellerId)?.name || item.responsible || "Sem responsável" })), "owner").slice(0, 8)
+    };
+  }
+  if (filter === "condominios") {
+    return {
+      primaryTitle: "Condomínios por bairro",
+      primary: counts(state.data.condos, "neighborhood").sort((a, b) => b.value - a.value).slice(0, 8),
+      secondaryTitle: "Status dos condomínios",
+      secondary: counts(state.data.condos, "status"),
+      tertiaryTitle: "Cidades",
+      tertiary: counts(state.data.condos, "city").slice(0, 8)
+    };
+  }
+  const sales = visibleSalesRows();
+  return {
+    primaryTitle: "Vendas por vendedor",
+    primary: sellerRanking().slice(0, 6).map((row) => ({ label: row.name, value: row.count })),
+    secondaryTitle: "Operação geral",
+    secondary: [
+      { label: "Vendas", value: sales.length },
+      { label: "Relacionamentos", value: state.data.visits.length },
+      { label: "Programações", value: state.data.weeklySchedules.length },
+      { label: "Expansão", value: state.data.expansions.length }
+    ],
+    tertiaryTitle: "Relacionamentos por status",
+    tertiary: counts(state.data.visits, "status").slice(0, 8)
+  };
+}
+
+function advancedBarChart(title, rows) {
+  const cleanRows = rows.filter((row) => row.label && Number(row.value || 0) > 0).slice(0, 8);
+  const max = Math.max(1, ...cleanRows.map((row) => Number(row.value || 0)));
+  return `<article class="analytics-card">
+    <header><strong>${escapeHtml(title)}</strong><span>${cleanRows.reduce((sum, row) => sum + Number(row.value || 0), 0)} total</span></header>
+    <div class="advanced-bars">
+      ${cleanRows.length ? cleanRows.map((row) => `<div class="advanced-bar" title="${escapeHtml(row.label)}: ${row.value}">
+        <span>${escapeHtml(row.label)}</span>
+        <div><i style="width:${Math.max(6, (Number(row.value || 0) / max) * 100)}%"></i></div>
+        <strong>${row.value}</strong>
+      </div>`).join("") : `<div class="empty compact">Sem dados para gráfico.</div>`}
+    </div>
+  </article>`;
+}
+
+function advancedDonutChart(title, rows) {
+  const cleanRows = rows.filter((row) => row.label && Number(row.value || 0) > 0).slice(0, 6);
+  const total = cleanRows.reduce((sum, row) => sum + Number(row.value || 0), 0);
+  let start = 0;
+  const colors = ["#071013", "#d6ad4f", "#e6007e", "#2f80ed", "#27ae60", "#f2994a"];
+  const gradient = cleanRows.map((row, index) => {
+    const size = total ? (Number(row.value || 0) / total) * 100 : 0;
+    const segment = `${colors[index % colors.length]} ${start}% ${start + size}%`;
+    start += size;
+    return segment;
+  }).join(", ");
+  return `<article class="analytics-card donut-card">
+    <header><strong>${escapeHtml(title)}</strong><span>${total} total</span></header>
+    <div class="donut-layout">
+      <div class="donut" style="background: conic-gradient(${gradient || "#e7edf2 0% 100%"})"><span>${total}</span></div>
+      <div class="donut-legend">
+        ${cleanRows.length ? cleanRows.map((row, index) => `<span><i style="background:${colors[index % colors.length]}"></i>${escapeHtml(row.label)} <strong>${row.value}</strong></span>`).join("") : `<span>Sem dados</span>`}
+      </div>
+    </div>
+  </article>`;
 }
 
 function reportOptionList(filter = state.reportFilter) {

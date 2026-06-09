@@ -1,4 +1,4 @@
-const CACHE_NAME = "ws-consultoria-v22";
+const CACHE_NAME = "ws-consultoria-v23";
 const APP_FILES = [
   "/",
   "/index.html",
