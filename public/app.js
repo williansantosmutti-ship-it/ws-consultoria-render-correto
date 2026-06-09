@@ -75,7 +75,15 @@ const menu = [
 const tabs = menu.flatMap((group) => group.page ? [[group.page, group.label]] : group.items);
 
 const $ = (selector) => document.querySelector(selector);
-const fmtDate = (value) => value ? new Date(value).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "-";
+const fmtDate = (value) => {
+  if (!value) return "-";
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const [year, month, day] = text.split("-").map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString("pt-BR");
+  }
+  return new Date(value).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+};
 const fmtTime = (value) => value ? new Date(value).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }) : "";
 const fmtDateTime = (value) => value ? new Date(value).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "-";
 const money = (value) => Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -1364,7 +1372,7 @@ function openForm(collection, item = {}) {
     modal.remove();
     await loadAll();
     render();
-    if (collection === "weeklySchedules" && scheduleSellerEmails(saved).length && confirm("Abrir convite no Google Agenda para enviar aos consultores?")) {
+    if (collection === "weeklySchedules" && scheduleSellerEmails(saved).length && confirm("Abrir convite semanal no Google Agenda para enviar aos consultores?")) {
       openCalendar(`weeklySchedules:${saved.id}`);
     }
   });
@@ -2213,6 +2221,27 @@ function dateFromWeekStart(weekStart, offset) {
   return date.toISOString().slice(0, 10);
 }
 
+function schedulePeriodFromDate(value = todayISO()) {
+  const base = new Date(`${String(value || todayISO()).slice(0, 10)}T12:00:00`);
+  const diff = base.getDay() === 0 ? -6 : 1 - base.getDay();
+  base.setDate(base.getDate() + diff);
+  const end = new Date(base);
+  end.setDate(base.getDate() + 5);
+  return { from: base.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
+}
+
+function normalizeSchedulePeriod(period = {}) {
+  const from = String(period.from || "").slice(0, 10);
+  const to = String(period.to || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return null;
+  return { from, to };
+}
+
+function schedulePeriodLabel(period = schedulePeriodFromDate(todayISO())) {
+  const selected = normalizeSchedulePeriod(period) || schedulePeriodFromDate(todayISO());
+  return `Período: ${fmtDate(selected.from)} a ${fmtDate(selected.to)}`;
+}
+
 function normalizeKey(value) {
   return String(value || "")
     .normalize("NFD")
@@ -2309,16 +2338,31 @@ function openCalendar(ref) {
   url.searchParams.set("dates", `${gcalDate(start)}/${gcalDate(end)}`);
   url.searchParams.set("details", event.note || "");
   url.searchParams.set("location", event.location || "");
+  if (event.recur || event.type === "weeklySchedules") url.searchParams.set("recur", event.recur || "RRULE:FREQ=WEEKLY");
   if (event.attendees?.length) url.searchParams.set("add", event.attendees.join(","));
   window.open(url.toString(), "_blank");
 }
 
 function openEmail(ref) {
+  if (String(ref).startsWith("weeklySchedules:")) return openWeeklyScheduleEmail(ref);
   const event = eventFromRef(ref);
   if (!event) return;
   const to = event.attendees?.length ? event.attendees.join(",") : state.settings.notificationEmail || state.settings.adminEmail || "";
   const subject = `Programação - ${event.title}`;
   const body = `Sistema de Gestão Comercial\n\nAtividade: ${event.title}\nData: ${fmtDateTime(event.date)}\nStatus: ${event.status}\nEndereço: ${event.location || "-"}\n\nObs:\n${event.note || ""}\n\nPara incluir na agenda, abra o botão Agenda da programação e salve o convite.`;
+  location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function openWeeklyScheduleEmail(ref) {
+  const [, id] = String(ref).split(":");
+  const item = findById("weeklySchedules", id);
+  if (!item) return;
+  const period = schedulePeriodFromDate(item.date || todayISO());
+  const rows = scheduleRowsForExport(period);
+  const emails = [...new Set(rows.flatMap(scheduleSellerEmails))];
+  const to = emails.length ? emails.join(",") : state.settings.notificationEmail || state.settings.adminEmail || "";
+  const subject = `Programação semanal da equipe - ${schedulePeriodLabel(period)}`;
+  const body = buildWeeklyScheduleText({ rows, period });
   location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
@@ -2760,13 +2804,35 @@ function copyWeeklySchedule() {
 }
 
 function downloadWeeklySchedule() {
-  printWeeklySchedulePdf();
+  openScheduleDownloadModal();
 }
 
-function printWeeklySchedulePdf() {
+function openScheduleDownloadModal() {
+  const modal = $("#modalTemplate").content.firstElementChild.cloneNode(true);
+  const period = schedulePeriodFromDate(todayISO());
+  modal.querySelector("h3").textContent = "Baixar programação";
+  modal.querySelector(".modal-body").innerHTML = `
+    <div class="form-grid">
+      <label>Data inicial<input name="from" type="date" value="${escapeHtml(period.from)}" required></label>
+      <label>Data final<input name="to" type="date" value="${escapeHtml(period.to)}" required></label>
+      <p class="hint full">Escolha o período que deve sair no PDF. Consultores no mesmo condomínio, horário e endereço serão agrupados em uma rota.</p>
+    </div>`;
+  modal.querySelector("footer .primary").textContent = "Baixar PDF";
+  modal.querySelectorAll(".close").forEach((button) => button.addEventListener("click", () => modal.remove()));
+  modal.querySelector("form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const selected = normalizeSchedulePeriod(Object.fromEntries(new FormData(event.currentTarget)));
+    if (!selected) return alert("Informe um período válido para baixar a programação.");
+    modal.remove();
+    printWeeklySchedulePdf(selected);
+  });
+  document.body.appendChild(modal);
+}
+
+function printWeeklySchedulePdf(period = schedulePeriodFromDate(todayISO())) {
   const win = window.open("", "_blank", "width=1200,height=800");
   if (!win) return alert("Permita pop-ups para gerar a programação em PDF.");
-  win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Programação semanal</title>${schedulePrintStyles()}</head><body>${scheduleDocumentHtml()}</body></html>`);
+  win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Programação semanal</title>${schedulePrintStyles()}</head><body>${scheduleDocumentHtml(period)}</body></html>`);
   win.document.close();
   win.focus();
   setTimeout(() => win.print(), 450);
@@ -2774,44 +2840,49 @@ function printWeeklySchedulePdf() {
 
 function schedulePrintStyles() {
   return `<style>
-    @page { size: A4 landscape; margin: 10mm; }
+    @page { size: A4 landscape; margin: 8mm; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #f4f5f7; color: #191d22; font-family: Arial, Helvetica, sans-serif; }
-    .schedule-page { min-height: 190mm; background: white; padding: 11mm 12mm 12mm; position: relative; overflow: visible; }
-    .schedule-page::before { content: ""; position: absolute; inset: 0; border-top: 9px solid #e6007e; border-bottom: 9px solid #111820; pointer-events: none; }
-    .schedule-head { display: grid; grid-template-columns: 32mm 1fr auto; align-items: center; gap: 11px; border-bottom: 1px solid #d9dde2; padding: 4mm 0 8px; margin-bottom: 9px; position: relative; z-index: 1; }
-    .use-logo { width: 28mm; max-height: 13mm; object-fit: contain; display: block; }
-    h1 { margin: 0; font-size: 18px; color: #111820; text-transform: uppercase; letter-spacing: .03em; }
-    .subtitle, .stamp, .note { color: #68727d; font-size: 10px; font-weight: 700; line-height: 1.5; }
+    body { margin: 0; background: #fff; color: #111820; font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .schedule-page { min-height: 190mm; background: white; padding: 7mm 8mm 8mm; border-top: 4mm solid #e6007e; border-bottom: 2.5mm solid #111820; }
+    .schedule-head { display: grid; grid-template-columns: 38mm minmax(0, 1fr) 54mm; align-items: center; gap: 10px; border-bottom: 1px solid #cfd5dc; padding: 0 0 6px; margin-bottom: 7px; }
+    .use-logo-wrap { height: 18mm; display: flex; align-items: center; overflow: visible; }
+    .use-logo { width: 35mm; height: 16mm; object-fit: contain; object-position: left center; display: block; }
+    h1 { margin: 0; font-size: 17px; color: #111820; text-transform: uppercase; letter-spacing: .02em; line-height: 1.1; }
+    .subtitle, .stamp { color: #4f5963; font-size: 9.5px; font-weight: 800; line-height: 1.35; }
     .stamp { text-align: right; }
-    .agenda-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; position: relative; z-index: 1; }
-    .agenda-day { min-height: 118mm; border: 1px solid #d9dde2; border-radius: 10px; overflow: hidden; background: #fbfcfd; break-inside: avoid; }
-    .agenda-day header { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 8px 9px; background: #111820; color: #fff; }
-    .agenda-day header strong { font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; }
-    .agenda-day header span { font-size: 9px; color: #ffcce7; font-weight: 800; }
-    .agenda-body { display: grid; gap: 6px; padding: 7px; }
-    .agenda-card { display: grid; gap: 5px; padding: 7px; border: 1px solid #e2e6eb; border-left: 4px solid #e6007e; border-radius: 8px; background: #fff; box-shadow: 0 4px 10px rgba(17,24,32,.05); break-inside: avoid; }
-    .agenda-top { display: flex; justify-content: space-between; gap: 5px; align-items: center; }
-    .agenda-time { color: #111820; font-size: 9px; font-weight: 900; white-space: nowrap; }
-    .agenda-seller { display: inline-block; max-width: 100%; padding: 3px 6px; border-radius: 999px; background: #ffe1f0; color: #9a0054; font-size: 8px; font-weight: 900; text-transform: uppercase; overflow-wrap: anywhere; }
-    .agenda-condo { margin: 0; color: #111820; font-size: 10px; line-height: 1.2; font-weight: 900; overflow-wrap: anywhere; }
-    .agenda-address { margin: 0; color: #68727d; font-size: 8.2px; line-height: 1.25; overflow-wrap: anywhere; }
-    .agenda-meta { display: flex; gap: 4px; flex-wrap: wrap; }
-    .agenda-meta span { padding: 2px 5px; border-radius: 999px; background: #f0f2f5; color: #3c4650; font-size: 7.5px; font-weight: 800; }
-    .empty-agenda { padding: 10px; color: #68727d; font-size: 9px; font-weight: 800; }
-    .note { margin-top: 10px; position: relative; z-index: 1; }
+    .period-pill { display: inline-flex; margin-top: 4px; padding: 3px 8px; border-radius: 999px; background: #fff0f7; color: #9a0054; font-size: 9px; font-weight: 900; }
+    .agenda-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; align-items: start; }
+    .agenda-day { border: 1px solid #cfd5dc; border-radius: 7px; overflow: hidden; background: #fbfcfd; break-inside: avoid; page-break-inside: avoid; }
+    .agenda-day header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px; background: #111820; color: #fff; }
+    .agenda-day header strong { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+    .agenda-day header span { font-size: 9px; color: #ffd3ea; font-weight: 900; white-space: nowrap; }
+    .agenda-body { display: grid; }
+    .agenda-card { display: grid; grid-template-columns: 58px minmax(0, 1fr) 88px; gap: 7px; align-items: start; padding: 6px 7px; border-top: 1px solid #e1e6ec; background: #fff; break-inside: avoid; page-break-inside: avoid; }
+    .agenda-card:first-child { border-top: 0; }
+    .agenda-time { display: grid; gap: 1px; justify-items: center; padding: 5px 3px; border-radius: 5px; background: #111820; color: #fff; font-size: 8.5px; font-weight: 900; line-height: 1.1; text-align: center; }
+    .agenda-time strong { font-size: 10px; }
+    .agenda-main { min-width: 0; display: grid; gap: 2px; }
+    .agenda-condo { margin: 0; color: #111820; font-size: 10.8px; line-height: 1.18; font-weight: 900; overflow-wrap: anywhere; }
+    .agenda-address { margin: 0; color: #58636e; font-size: 8.5px; line-height: 1.22; overflow-wrap: anywhere; }
+    .agenda-team { min-width: 0; padding: 5px 6px; border-radius: 5px; background: #fff0f7; color: #9a0054; }
+    .agenda-team span { display: block; color: #6e7680; font-size: 6.8px; font-weight: 900; text-transform: uppercase; margin-bottom: 2px; }
+    .agenda-team strong { display: block; font-size: 8.4px; line-height: 1.16; font-weight: 900; text-transform: uppercase; overflow-wrap: anywhere; }
+    .agenda-meta { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 2px; }
+    .agenda-meta span { padding: 2px 5px; border-radius: 999px; background: #eef1f4; color: #303841; font-size: 7.2px; font-weight: 900; }
+    .empty-agenda { padding: 9px; color: #68727d; font-size: 9px; font-weight: 800; }
     @media print { body { background: white; } .schedule-page { min-height: auto; } }
   </style>`;
 }
 
-function scheduleDocumentHtml() {
-  const rows = weeklyScheduleRowsForReport();
+function scheduleDocumentHtml(period = schedulePeriodFromDate(todayISO())) {
+  const rows = scheduleRowsForExport(period);
   return `<main class="schedule-page">
     <header class="schedule-head">
-      <img class="use-logo" src="${location.origin}/assets/use-logo.gif" alt="USE Telecom">
+      <div class="use-logo-wrap"><img class="use-logo" src="${location.origin}/assets/use-logo.gif" alt="USE Telecom"></div>
       <div>
         <h1>Programação semanal da equipe</h1>
         <div class="subtitle">Roteiro operacional para atuação em condomínios</div>
+        <div class="period-pill">${escapeHtml(schedulePeriodLabel(period))}</div>
       </div>
       <div class="stamp">
         Gerado em ${fmtDateTime(new Date().toISOString())}<br>
@@ -2820,14 +2891,52 @@ function scheduleDocumentHtml() {
       </div>
     </header>
     ${rows.length ? scheduleAgendaGrid(rows) : `<section class="agenda-day"><header><strong>Sem programação</strong></header><div class="empty-agenda">Nenhuma programação cadastrada para exportar.</div></section>`}
-    <p class="note">Relatório exclusivo da programação operacional. Logo USE aplicada somente neste documento.</p>
   </main>`;
 }
 
-function weeklyScheduleRowsForReport() {
+function weeklyScheduleRowsForReport(options = {}) {
+  const { from, to, sellerIds = [], respectQuery = true } = options || {};
+  const sellerSet = new Set((Array.isArray(sellerIds) ? sellerIds : [sellerIds]).map(String).filter(Boolean));
   return state.data.weeklySchedules
-    .filter((item) => !state.query || JSON.stringify(item).toLowerCase().includes(state.query.toLowerCase()))
+    .filter((item) => !respectQuery || !state.query || JSON.stringify(item).toLowerCase().includes(state.query.toLowerCase()))
+    .filter((item) => !from || String(item.date || "") >= from)
+    .filter((item) => !to || String(item.date || "") <= to)
+    .filter((item) => !sellerSet.size || scheduleSellerIds(item).some((id) => sellerSet.has(String(id))))
     .sort((a, b) => `${a.date || ""}${a.startTime || ""}`.localeCompare(`${b.date || ""}${b.startTime || ""}`));
+}
+
+function scheduleRowsForExport(period) {
+  return groupWeeklyScheduleRows(weeklyScheduleRowsForReport({ ...period, respectQuery: false }));
+}
+
+function groupWeeklyScheduleRows(rows) {
+  const groups = new Map();
+  rows.forEach((item) => {
+    const condo = findById("condos", item.condoId);
+    const condoName = condo?.name || item.condoName || "";
+    const address = item.address || condo?.address || "";
+    const key = [
+      item.date || "",
+      item.startTime || "",
+      item.endTime || "",
+      item.condoId || normalizeKey(condoName),
+      normalizeKey(address),
+      normalizeKey(item.workArea || ""),
+      item.accessMode || "",
+      item.status || "Programada"
+    ].join("|");
+    if (!groups.has(key)) {
+      groups.set(key, { ...item, condoName, address, sellerIds: [], sellerId: "", notes: "", __notes: new Set() });
+    }
+    const row = groups.get(key);
+    row.sellerIds = [...new Set([...scheduleSellerIds(row), ...scheduleSellerIds(item)])];
+    row.sellerId = row.sellerIds[0] || "";
+    if (item.notes && !row.__notes.has(item.notes)) row.__notes.add(item.notes);
+    row.notes = [...row.__notes].join(" | ");
+  });
+  return [...groups.values()]
+    .map(({ __notes, ...row }) => row)
+    .sort((a, b) => `${a.date || ""}${a.startTime || ""}${a.condoName || ""}`.localeCompare(`${b.date || ""}${b.startTime || ""}${b.condoName || ""}`));
 }
 
 function scheduleAgendaGrid(rows) {
@@ -2855,16 +2964,22 @@ function scheduleAgendaDay(date, items) {
 function scheduleAgendaCard(item) {
   const condo = findById("condos", item.condoId);
   return `<div class="agenda-card">
-    <div class="agenda-top">
-      <span class="agenda-time">${escapeHtml(item.startTime || "-")} às ${escapeHtml(item.endTime || "-")}</span>
-      <span class="agenda-seller">${escapeHtml(scheduleSellers(item) || "Equipe")}</span>
+    <div class="agenda-time">
+      <strong>${escapeHtml(item.startTime || "-")}</strong>
+      <span>até ${escapeHtml(item.endTime || "-")}</span>
     </div>
-    <p class="agenda-condo">${escapeHtml(condo?.name || item.condoName || "-")}</p>
-    <p class="agenda-address">${escapeHtml(item.address || condo?.address || "-")}</p>
-    <div class="agenda-meta">
-      <span>${escapeHtml(item.accessMode || "Atuação")}</span>
-      <span>${escapeHtml(item.workArea || "Área geral")}</span>
-      <span>${escapeHtml(item.status || "Programada")}</span>
+    <div class="agenda-main">
+      <p class="agenda-condo">${escapeHtml(condo?.name || item.condoName || "-")}</p>
+      <p class="agenda-address">${escapeHtml(item.address || condo?.address || "-")}</p>
+      <div class="agenda-meta">
+        <span>${escapeHtml(item.accessMode || "Atuação")}</span>
+        <span>${escapeHtml(item.workArea || "Área geral")}</span>
+        <span>${escapeHtml(item.status || "Programada")}</span>
+      </div>
+    </div>
+    <div class="agenda-team">
+      <span>Equipe</span>
+      <strong>${escapeHtml(scheduleSellers(item) || "Consultores")}</strong>
     </div>
   </div>`;
 }
@@ -2903,17 +3018,23 @@ function scheduleSellerBlock(seller, rows) {
 }
 
 function scheduleSellerNames(item) {
-  const ids = Array.isArray(item.sellerIds) && item.sellerIds.length ? item.sellerIds : [item.sellerId].filter(Boolean);
+  const ids = scheduleSellerIds(item);
   const names = ids.map((id) => findById("sellers", id)?.name).filter(Boolean);
   return names.length ? names : ["Sem consultor definido"];
 }
 
 function scheduleSellerEmails(item) {
-  const ids = Array.isArray(item.sellerIds) && item.sellerIds.length ? item.sellerIds : [item.sellerId].filter(Boolean);
+  const ids = scheduleSellerIds(item);
   return [...new Set(ids
     .map((id) => findById("sellers", id))
     .map((seller) => seller?.email || knownSellerEmail(seller?.name))
     .filter(Boolean))];
+}
+
+function scheduleSellerIds(item) {
+  return (Array.isArray(item?.sellerIds) && item.sellerIds.length ? item.sellerIds : [item?.sellerId])
+    .map(String)
+    .filter(Boolean);
 }
 
 function knownSellerEmail(name) {
@@ -2940,10 +3061,11 @@ function scheduleReportRow(item) {
   </tr>`;
 }
 
-function buildWeeklyScheduleText() {
-  const rows = weeklyScheduleRowsForReport();
+function buildWeeklyScheduleText(options = {}) {
+  const rows = options.rows || weeklyScheduleRowsForReport(options.period || {});
   const lines = [
     "WS Consultoria - Programação semanal da equipe",
+    options.period ? schedulePeriodLabel(options.period) : "",
     `Gerado em: ${fmtDateTime(new Date().toISOString())}`,
     ""
   ];
