@@ -103,8 +103,23 @@ async function request(url, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined
   });
   const json = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(json.error || "Nao foi possivel concluir.");
+  if (!response.ok) {
+    const message = json.error || "Não foi possível concluir.";
+    if (response.status === 401 && !options.silent && !options.body?.silent) {
+      showSessionExpired(message);
+    }
+    throw new Error(message);
+  }
   return json;
+}
+
+let sessionExpiredShown = false;
+function showSessionExpired(message = "Sessão expirada. Entre novamente.") {
+  if (sessionExpiredShown) return;
+  sessionExpiredShown = true;
+  alert(message);
+  $("#app")?.classList.add("hidden");
+  $("#login")?.classList.remove("hidden");
 }
 
 async function boot() {
@@ -1479,45 +1494,57 @@ function formFields(collection, item = {}) {
 function openForm(collection, item = {}) {
   const modal = $("#modalTemplate").content.firstElementChild.cloneNode(true);
   modal.querySelector("h3").textContent = `${item.id ? "Editar" : "Novo"} ${labelFor(collection)}`;
-  modal.querySelector(".modal-body").innerHTML = `<div class="form-grid">${formFields(collection, item).join("")}</div>`;
+  modal.querySelector(".modal-body").innerHTML = `<div class="form-grid">${formFields(collection, item).join("")}</div><p class="modal-message" data-modal-message></p>`;
   modal.querySelectorAll(".close").forEach((button) => button.addEventListener("click", () => modal.remove()));
   if (collection === "weeklySchedules") hydrateScheduleForm(modal);
   modal.querySelector("form").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const raw = Object.fromEntries(formData);
-    for (const [key] of formData.entries()) {
-      if (key.endsWith("[]")) raw[key.slice(0, -2)] = formData.getAll(key).filter(Boolean);
-    }
-    if (collection === "weeklySchedules") {
-      const condo = findById("condos", raw.condoId);
-      raw.condoName = condo?.name || raw.condoName || "";
-      raw.address = raw.address || condo?.address || "";
-      if (!raw.sellerId && Array.isArray(raw.sellerIds)) raw.sellerId = raw.sellerIds[0] || "";
-    }
-    if (collection === "visits") {
-      const condo = findById("condos", raw.condoId);
-      raw.condoName = condo?.name || raw.condoName || "";
-      raw.syndic = raw.syndic || condo?.contactName || "";
-      raw.managerCompany = raw.managerCompany || condo?.managerCompany || "";
-    }
-    if (collection === "expansions") {
-      const condo = findById("condos", raw.condoId);
-      raw.condoName = raw.condoName || condo?.name || "";
-      raw.address = raw.address || condo?.address || "";
-      raw.city = raw.city || condo?.city || "";
-      raw.neighborhood = raw.neighborhood || condo?.neighborhood || "";
-    }
-    const body = normalize(collection, raw);
-    const saved = await request(item.id ? `/api/${collection}/${item.id}` : `/api/${collection}`, {
-      method: item.id ? "PUT" : "POST",
-      body
-    });
-    modal.remove();
-    await loadAll();
-    render();
-    if (collection === "weeklySchedules" && scheduleSellerEmails(saved).length && confirm("Abrir email com a programação da semana para os consultores?")) {
-      openWeeklyScheduleEmail(`weeklySchedules:${saved.id}`);
+    const submitButton = modal.querySelector("footer .primary");
+    const message = modal.querySelector("[data-modal-message]");
+    submitButton.disabled = true;
+    const originalLabel = submitButton.textContent;
+    submitButton.textContent = "Salvando...";
+    message.textContent = "";
+    try {
+      const formData = new FormData(event.currentTarget);
+      const raw = Object.fromEntries(formData);
+      for (const [key] of formData.entries()) {
+        if (key.endsWith("[]")) raw[key.slice(0, -2)] = formData.getAll(key).filter(Boolean);
+      }
+      if (collection === "weeklySchedules") {
+        const condo = findById("condos", raw.condoId);
+        raw.condoName = condo?.name || raw.condoName || "";
+        raw.address = raw.address || condo?.address || "";
+        if (!raw.sellerId && Array.isArray(raw.sellerIds)) raw.sellerId = raw.sellerIds[0] || "";
+      }
+      if (collection === "visits") {
+        const condo = findById("condos", raw.condoId);
+        raw.condoName = condo?.name || raw.condoName || "";
+        raw.syndic = raw.syndic || condo?.contactName || "";
+        raw.managerCompany = raw.managerCompany || condo?.managerCompany || "";
+      }
+      if (collection === "expansions") {
+        const condo = findById("condos", raw.condoId);
+        raw.condoName = raw.condoName || condo?.name || "";
+        raw.address = raw.address || condo?.address || "";
+        raw.city = raw.city || condo?.city || "";
+        raw.neighborhood = raw.neighborhood || condo?.neighborhood || "";
+      }
+      const body = normalize(collection, raw);
+      const saved = await request(item.id ? `/api/${collection}/${item.id}` : `/api/${collection}`, {
+        method: item.id ? "PUT" : "POST",
+        body
+      });
+      modal.remove();
+      await loadAll();
+      render();
+      if (collection === "weeklySchedules" && scheduleSellerEmails(saved).length && confirm("Abrir envio da programação da semana para os consultores?")) {
+        openWeeklyScheduleEmail(`weeklySchedules:${saved.id}`);
+      }
+    } catch (error) {
+      message.textContent = error.message || "Não foi possível salvar. Tente novamente.";
+      submitButton.disabled = false;
+      submitButton.textContent = originalLabel;
     }
   });
   document.body.appendChild(modal);
@@ -2715,7 +2742,7 @@ function openEmail(ref) {
   const to = event.attendees?.length ? event.attendees.join(",") : state.settings.notificationEmail || state.settings.adminEmail || "";
   const subject = `Programação - ${event.title}`;
   const body = `Sistema de Gestão Comercial\n\nAtividade: ${event.title}\nData: ${fmtDateTime(event.date)}\nStatus: ${event.status}\nEndereço: ${event.location || "-"}\n\nObs:\n${event.note || ""}`;
-  location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  openShareEmailModal({ to, subject, body, rows: [] });
 }
 
 function openWeeklyScheduleEmail(ref) {
@@ -2728,7 +2755,85 @@ function openWeeklyScheduleEmail(ref) {
   const to = emails.length ? emails.join(",") : state.settings.notificationEmail || state.settings.adminEmail || "";
   const subject = `Programação semanal da equipe - ${schedulePeriodLabel(period)}`;
   const body = buildWeeklyScheduleText({ rows, period });
-  location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  openShareEmailModal({ to, subject, body, rows, period });
+}
+
+function openShareEmailModal({ to, subject, body, rows = [], period = null }) {
+  const modal = $("#modalTemplate").content.firstElementChild.cloneNode(true);
+  modal.querySelector("h3").textContent = "Enviar equipe";
+  modal.querySelector(".modal-body").innerHTML = `
+    <div class="share-email">
+      <label>Destinatários<input name="to" value="${escapeHtml(to || "")}" readonly></label>
+      <label>Assunto<input name="subject" value="${escapeHtml(subject || "")}" readonly></label>
+      <label class="full">Mensagem<textarea name="body" readonly>${escapeHtml(body || "")}</textarea></label>
+      <p class="hint">Se o email automático não abrir no seu computador, copie a mensagem ou baixe o arquivo de agenda para enviar no grupo/equipe.</p>
+    </div>`;
+  const footer = modal.querySelector("footer");
+  footer.innerHTML = `
+    <button type="button" class="secondary close">Fechar</button>
+    ${rows.length ? `<button type="button" class="secondary" data-download-ics>Baixar agenda</button>` : ""}
+    <button type="button" class="secondary" data-copy-share-email>Copiar mensagem</button>
+    <button type="button" class="primary" data-open-mailto>Abrir email</button>`;
+  modal.querySelectorAll(".close").forEach((button) => button.addEventListener("click", () => modal.remove()));
+  modal.querySelector("[data-copy-share-email]")?.addEventListener("click", async () => {
+    await navigator.clipboard.writeText(`Para: ${to}\nAssunto: ${subject}\n\n${body}`);
+    alert("Mensagem copiada.");
+  });
+  modal.querySelector("[data-open-mailto]")?.addEventListener("click", () => {
+    window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  });
+  modal.querySelector("[data-download-ics]")?.addEventListener("click", () => downloadScheduleIcs(rows, period));
+  document.body.appendChild(modal);
+}
+
+function downloadScheduleIcs(rows = [], period = null) {
+  const events = rows.filter((item) => item.date).map((item) => {
+    const condo = findById("condos", item.condoId);
+    const title = `${condo?.name || item.condoName || "Programação"} - ${scheduleSellers(item) || "Equipe"}`;
+    const location = item.address || condo?.address || "";
+    const description = [
+      `Consultores: ${scheduleSellers(item) || "-"}`,
+      `Status: ${item.status || "Programada"}`,
+      `Atuação: ${item.accessMode || "-"} | ${item.workArea || "-"}`,
+      item.notes ? `Orientação: ${item.notes}` : ""
+    ].filter(Boolean).join("\\n");
+    return [
+      "BEGIN:VEVENT",
+      `UID:${item.id || Math.random().toString(16).slice(2)}@ws-consultoria`,
+      `DTSTAMP:${icsUtcDate(new Date())}`,
+      `DTSTART;TZID=America/Sao_Paulo:${icsLocalDate(item.date, item.startTime || "09:00")}`,
+      `DTEND;TZID=America/Sao_Paulo:${icsLocalDate(item.date, item.endTime || "10:00")}`,
+      `SUMMARY:${icsEscape(title)}`,
+      `LOCATION:${icsEscape(location)}`,
+      `DESCRIPTION:${icsEscape(description)}`,
+      "END:VEVENT"
+    ].join("\r\n");
+  });
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//WS Consultoria//Programacao Semanal//PT-BR",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "X-WR-CALNAME:Programação WS Consultoria",
+    "X-WR-TIMEZONE:America/Sao_Paulo",
+    ...events,
+    "END:VCALENDAR"
+  ].join("\r\n");
+  const label = period ? `${period.from}-a-${period.to}` : todayISO();
+  download(new Blob([ics], { type: "text/calendar;charset=utf-8" }), `programacao-equipe-${label}.ics`);
+}
+
+function icsLocalDate(date, time) {
+  return `${String(date || todayISO()).replace(/-/g, "")}T${String(time || "09:00").replace(":", "")}00`;
+}
+
+function icsUtcDate(date) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+function icsEscape(value) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
 }
 
 function eventFromRef(ref) {

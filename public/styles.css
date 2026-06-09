@@ -1611,6 +1611,25 @@ body[data-theme="dark"] .history-card.danger span { background: #3b1614; color: 
 .modal-body { padding: 14px; display: grid; gap: 10px; }
 .form-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .form-grid .full { grid-column: 1 / -1; }
+.modal-message {
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 800;
+}
+.share-email {
+  display: grid;
+  gap: 10px;
+}
+.share-email textarea {
+  min-height: 220px;
+  font-family: Consolas, "Segoe UI", monospace;
+  font-size: 12px;
+}
+.share-email input[readonly],
+.share-email textarea[readonly] {
+  background: var(--surface);
+}
 .icon { width: 40px; padding: 0; }
 
 @media (max-width: 900px) {

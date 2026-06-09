@@ -122,7 +122,9 @@ function readStore() {
 }
 
 function writeStore(data) {
-  fs.writeFileSync(STORE_FILE, JSON.stringify(data, null, 2));
+  const tmp = `${STORE_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, STORE_FILE);
 }
 
 function uid() {
@@ -495,13 +497,18 @@ function importSalesRows(db, rows) {
   return imported;
 }
 
-async function importSalesFromUrl(db, url) {
-  const sourceUrl = googleSheetCsvUrl(url || db.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL);
+async function fetchSalesRows(url) {
+  const sourceUrl = googleSheetCsvUrl(url || DEFAULT_SALES_SHEET_URL);
   if (!sourceUrl) throw new Error("Informe o link da planilha do Google Sheets.");
   const response = await fetch(sourceUrl);
   if (!response.ok) throw new Error("Nao foi possivel ler a planilha. Confira se ela esta publicada/compartilhada para leitura.");
   const rows = parseCsv(await response.text());
   if (rows.length < 2) throw new Error("A planilha nao tem linhas para importar.");
+  return { rows, sourceUrl };
+}
+
+async function importSalesFromUrl(db, url) {
+  const { rows } = await fetchSalesRows(url || db.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL);
   const imported = importSalesRows(db, rows);
   db.settings.salesSheetUrl = url || db.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL;
   db.settings.salesImportAt = new Date().toISOString();
@@ -513,10 +520,16 @@ async function runAutomaticSalesImport() {
   if (salesImportRunning) return 0;
   salesImportRunning = true;
   try {
-    const db = ensureShape(readStore());
-    const imported = await importSalesFromUrl(db, db.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL);
-    if (imported) addActivity(db, { name: "Sistema" }, "Importou vendas automaticamente", `${imported} venda(s) pela planilha online`);
-    writeStore(db);
+    const snapshot = ensureShape(readStore());
+    const source = snapshot.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL;
+    const { rows } = await fetchSalesRows(source);
+    const latest = ensureShape(readStore());
+    const imported = importSalesRows(latest, rows);
+    latest.settings.salesSheetUrl = source;
+    latest.settings.salesImportAt = new Date().toISOString();
+    latest.settings.salesImportStatus = imported ? `${imported} venda(s) nova(s) importada(s)` : "Sem novas vendas";
+    if (imported) addActivity(latest, { name: "Sistema" }, "Importou vendas automaticamente", `${imported} venda(s) pela planilha online`);
+    writeStore(latest);
     return imported;
   } catch (error) {
     const db = ensureShape(readStore());
