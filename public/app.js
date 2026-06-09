@@ -11,6 +11,7 @@ const state = {
   reportFilter: "geral",
   reportOptions: {},
   scheduleView: "week",
+  scheduleWeekStart: "",
   scheduleImport: {
     status: "idle",
     fileName: "",
@@ -24,6 +25,11 @@ const state = {
   activeToasts: new Set(),
   dismissedAlerts: new Set(JSON.parse(localStorage.getItem("ws-dismissed-alerts") || "[]"))
 };
+
+const DEFAULT_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1VUVzx5q_emUtQtj0k2IG_6Nv2vwIrPcVRLw74UcWb4Y/edit?gid=161138712#gid=161138712";
+const SALES_AUTO_SYNC_MS = 60000;
+const COMMERCIAL_SELLER_KEYS = new Set(["IVAN", "LUISE", "ISIS", "BRUNA", "ADRIELE"]);
+let salesAutoTimer = null;
 
 const mapState = {
   files: [],
@@ -140,6 +146,7 @@ async function login(event) {
 }
 
 async function logout() {
+  clearInterval(salesAutoTimer);
   await request("/api/logout", { method: "POST" });
   location.reload();
 }
@@ -172,6 +179,7 @@ function showApp() {
   renderNav();
   render();
   startReminders();
+  startSalesAutoSync();
 }
 
 function renderNav() {
@@ -282,10 +290,16 @@ function reminderItem(event) {
   return `<div class="alert reminder-item">
     <span><strong>${fmtDateTime(event.date)}</strong> - ${escapeHtml(event.title)}<small>${escapeHtml(event.note || "")}</small></span>
     <div class="alert-actions">
-      <button class="secondary" data-calendar="${event.type}:${event.id}">Google Agenda</button>
+      ${reminderActionButton(event)}
       <button class="ghost" data-dismiss-alert="${alertKey(event)}">Fechar</button>
     </div>
   </div>`;
+}
+
+function reminderActionButton(event) {
+  const ref = `${event.type}:${event.id}`;
+  if (event.type === "weeklySchedules") return `<button class="secondary" data-email="${ref}">Email equipe</button>`;
+  return `<button class="secondary" data-calendar="${ref}">Google Agenda</button>`;
 }
 
 function renderAlerts() {
@@ -351,7 +365,7 @@ function dashboardContent(filter) {
 
 function summaryDashboard() {
   const month = new Date().toISOString().slice(0, 7);
-  const salesMonth = state.data.sales.filter((sale) => String(sale.date || "").startsWith(month));
+  const salesMonth = visibleSalesRows().filter((sale) => String(sale.date || "").startsWith(month));
   const openVisits = state.data.visits.filter((visit) => visit.status !== "Concluida").length;
   const openExpansions = state.data.expansions.filter((item) => !["Concluido", "Cancelado"].includes(item.status)).length;
   const todayEvents = upcomingEvents(true).filter((event) => String(event.date || "").slice(0, 10) === todayISO());
@@ -420,7 +434,7 @@ function smartRecommendations() {
 
 function salesDashboard() {
   const month = new Date().toISOString().slice(0, 7);
-  const sales = state.data.sales.filter((sale) => String(sale.date || "").startsWith(month));
+  const sales = visibleSalesRows().filter((sale) => String(sale.date || "").startsWith(month));
   return `
     <div class="grid cols-3">
       ${metric("Vendas no mês", sales.length)}
@@ -428,7 +442,7 @@ function salesDashboard() {
       ${metric("Ticket médio", money(sales.length ? sales.reduce((sum, sale) => sum + Number(sale.value || 0), 0) / sales.length : 0))}
     </div>
     <section class="card">${barChart("Vendas por vendedor", sellerRanking().map((row) => ({ label: row.name, value: row.count })))}</section>
-    <section class="card">${table(["Data", "Vendedor", "Cliente", "Valor"], sales.slice(0, 12).map((sale) => [fmtDate(sale.date), findById("sellers", sale.sellerId)?.name || "-", sale.customer || "-", money(sale.value)]))}</section>`;
+    <section class="card">${table(["Data", "Vendedor", "Cliente", "Valor"], sales.slice(0, 12).map((sale) => [fmtDate(sale.date), saleSellerName(sale) || "-", sale.customer || "-", money(sale.value)]))}</section>`;
 }
 
 function visitsDashboard(title, predicate) {
@@ -554,6 +568,9 @@ function condoVisitSummary(condoId) {
 
 function weeklySchedules() {
   const rows = filteredWithPage("weeklySchedules").sort((a, b) => `${a.date || ""}${a.startTime || ""}`.localeCompare(`${b.date || ""}${b.startTime || ""}`));
+  const selectedWeekStart = state.scheduleWeekStart || currentMondayISO();
+  const selectedPeriod = schedulePeriodFromDate(selectedWeekStart);
+  const boardRows = rows.filter((item) => String(item.date || "") >= selectedPeriod.from && String(item.date || "") <= selectedPeriod.to);
   const today = todayISO();
   const weekEnd = new Date();
   weekEnd.setDate(weekEnd.getDate() + 7);
@@ -582,12 +599,17 @@ function weeklySchedules() {
             ${scheduleSegment("week", "Semana operacional")}
             ${scheduleSegment("history", "Histórico de visitas")}
           </div>
+          <div class="week-picker">
+            <button class="secondary" type="button" data-schedule-week-nav="-7">Anterior</button>
+            <label>Semana<input type="date" data-schedule-week value="${escapeHtml(selectedWeekStart)}"></label>
+            <button class="secondary" type="button" data-schedule-week-nav="7">Próxima</button>
+          </div>
           <button class="secondary" data-copy-schedule>Copiar programação</button>
           <button class="secondary" data-download-schedule>Baixar PDF</button>
           <button class="primary" data-new="weeklySchedules">Adicionar rota</button>
         </div>
       </div>
-      ${state.scheduleView === "history" ? scheduleHistoryView() : weeklyBoard(rows)}
+      ${state.scheduleView === "history" ? scheduleHistoryView() : weeklyBoard(boardRows, selectedWeekStart)}
     </section>`;
 }
 
@@ -600,7 +622,7 @@ function scheduleImportPanel() {
     <div class="section-head">
       <div>
         <h3>Importar programação por PDF</h3>
-        <p class="hint">Selecione o arquivo da programação semanal. O sistema identifica dia, consultor e condomínio usando os cadastros já salvos.</p>
+        <p class="hint">Selecione o arquivo da programação semanal. O sistema identifica dia, consultor e condomínio usando os cadastros já salvos. Semanas anteriores permanecem salvas; escolha a segunda-feira correta antes de lançar.</p>
       </div>
       <div class="toolbar">
         <label>Segunda-feira da semana<input type="date" data-import-week-start value="${escapeHtml(weekStart)}"></label>
@@ -755,10 +777,11 @@ function expansions() {
 
 function sellers() {
   const rankings = sellerRanking();
-  const monthSales = state.data.sales.filter((sale) => String(sale.date || "").startsWith(new Date().toISOString().slice(0, 7)));
+  const sellers = visibleCommercialSellers();
+  const monthSales = visibleSalesRows().filter((sale) => String(sale.date || "").startsWith(new Date().toISOString().slice(0, 7)));
   return `
     <div class="seller-grid">
-      ${state.data.sellers.map((seller) => sellerPanel(seller, monthSales)).join("")}
+      ${sellers.map((seller) => sellerPanel(seller, monthSales)).join("")}
     </div>
     <section class="card">
       <div class="section-head"><h3>Ranking automático</h3></div>
@@ -770,7 +793,7 @@ function sellers() {
         `${row.conversion}%`
       ]))}
     </section>
-    ${listView("Equipe de vendedores", "sellers", ["Nome", "Contato", "Meta mensal", "Status", "Vendas mês", "Ações"], filtered("sellers").map((seller) => [
+    ${listView("Equipe de vendedores", "sellers", ["Nome", "Contato", "Meta mensal", "Status", "Vendas mês", "Ações"], sellers.map((seller) => [
     seller.name,
     [seller.phone, seller.email].filter(Boolean).join(" | ") || "-",
     seller.goal || 0,
@@ -781,15 +804,16 @@ function sellers() {
 }
 
 function sales() {
-  const rows = filteredWithPage("sales");
+  const rows = filteredWithPage("sales", visibleSalesRows()).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   return `
     ${salesMetrics(rows)}
     ${filterPanel("sales", [
       filterInput("from", "Início", "date"),
       filterInput("to", "Fim", "date"),
-      filterSelect("seller", "Vendedor", options("sellers").slice(1)),
+      filterSelect("seller", "Vendedor", commercialSellerOptions()),
       filterSelect("condo", "Condomínio", options("condos").slice(1)),
       filterSelect("plan", "Plano", options("plans").slice(1)),
+      filterSelect("saleType", "Tipo", ["Venda nova", "Repetidor de sinal", "Upgrade", "Downgrade", "Cancelamento"]),
       filterSelect("status", "Status", ["Confirmada", "Pendente", "Cancelada"]),
       filterInput("minValue", "Valor mínimo", "number")
     ])}
@@ -799,20 +823,21 @@ function sales() {
         <button class="primary" data-import-sales>Atualizar vendas da planilha</button>
       </div>
       <form id="salesSheetForm" class="form-grid">
-        ${input("salesSheetUrl", "Link CSV publicado da planilha online", state.settings.salesSheetUrl || "", "url", "full")}
-        <p class="hint full">Pode colar o link normal do Google Sheets. A planilha precisa estar com acesso "qualquer pessoa com o link pode visualizar" ou publicada na web. Cabeçalhos aceitos: vendedor, consultor, cliente, plano, valor, data, condomínio, status e obs.</p>
+        ${input("salesSheetUrl", "Link da planilha online", state.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL, "url", "full")}
+        <p class="hint full">Atualização automática ativa a cada 1 minuto. O sistema importa somente IVAN, LUISE, ISIS, BRUNA e ADRIELE, classificando venda nova, repetidor de sinal, upgrade, downgrade e cancelamento.</p>
         <label class="full">Ou cole aqui os dados copiados da planilha<textarea name="csvText" placeholder="Cole as colunas com cabeçalho: vendedor, cliente, plano, valor, data..."></textarea></label>
         <button class="secondary" type="button" data-import-sales-text>Importar dados colados</button>
       </form>
     </section>
-    ${listView("Vendas e apuração", "sales", ["Data", "Vendedor", "Plano", "Cliente", "Condomínio", "Valor", "Status", "Ações"], rows.map((sale) => [
+    ${listView("Vendas e apuração", "sales", ["Data", "Vendedor", "Tipo", "Plano", "Cliente", "Condomínio", "Valor", "Status", "Ações"], rows.map((sale) => [
       fmtDate(sale.date),
-      findById("sellers", sale.sellerId)?.name || "-",
+      saleSellerName(sale) || "-",
+      saleTypeLabel(sale),
       findById("plans", sale.planId)?.name || sale.planName || "-",
       sale.customer || "-",
       sale.condoName || findById("condos", sale.condoId)?.name || "-",
       money(sale.value),
-      status(sale.status || "Confirmada"),
+      status(saleStatusLabel(sale)),
       actions("sales", sale.id)
     ]))}`;
 }
@@ -948,7 +973,7 @@ function settings() {
         ${input("accentColor", "Cor de destaque", state.settings.accentColor || "#c9a227", "color")}
         ${select("theme", "Tema inicial", ["dark", "light"], state.settings.theme || "dark")}
         ${input("logoUrl", "URL ou caminho da logo", state.settings.logoUrl || "", "text", "full")}
-        ${input("salesSheetUrl", "Link CSV da planilha de vendas", state.settings.salesSheetUrl || "", "url", "full")}
+        ${input("salesSheetUrl", "Link da planilha de vendas", state.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL, "url", "full")}
         <label class="full">Observações de integração<textarea name="integrationNotes">${escapeHtml(state.settings.integrationNotes || "Lembretes aparecem na tela e podem usar notificações do navegador. Email automático e Google Agenda direto precisam de credenciais SMTP e Google Calendar API.")}</textarea></label>
         <button class="primary" type="submit">Salvar configurações</button>
       </form>
@@ -1033,20 +1058,69 @@ function expansionMetrics(rows) {
   </div>`;
 }
 
+function visibleCommercialSellers() {
+  return state.data.sellers.filter((seller) => COMMERCIAL_SELLER_KEYS.has(firstNameKey(seller.name)));
+}
+
+function commercialSellerOptions() {
+  return visibleCommercialSellers().map((seller) => ({ id: seller.id, name: seller.name }));
+}
+
+function saleSellerName(sale) {
+  return findById("sellers", sale.sellerId)?.name || sale.sellerName || sellerNameFromExternalKey(sale) || "";
+}
+
+function visibleSalesRows(rows = state.data.sales) {
+  return rows.filter((sale) => COMMERCIAL_SELLER_KEYS.has(firstNameKey(saleSellerName(sale))));
+}
+
+function sellerNameFromExternalKey(sale) {
+  const key = firstNameKey(String(sale.externalKey || "").split("|")[1] || "");
+  return COMMERCIAL_SELLER_KEYS.has(key) ? key : "";
+}
+
+function firstNameKey(value) {
+  return normalizeKey(value).split(" ")[0] || "";
+}
+
+function saleTypeLabel(sale) {
+  const raw = sale.type || sale.saleType || sale.category || "";
+  const text = normalizeKey([raw, sale.planName, sale.notes, sale.status].filter(Boolean).join(" "));
+  if (text.includes("CANCEL")) return "Cancelamento";
+  if (text.includes("REPETIDOR")) return "Repetidor de sinal";
+  if (text.includes("DOWNGRADE") || text.includes("DOWGRAD")) return "Downgrade";
+  if (text.includes("UPGRADE")) return "Upgrade";
+  return raw || "Venda nova";
+}
+
+function saleStatusLabel(sale) {
+  const text = normalizeKey([sale.status, sale.type, sale.saleType].filter(Boolean).join(" "));
+  if (text.includes("CANCEL")) return "Cancelada";
+  if (text.includes("AGUARD") || text.includes("PENDENTE") || text.includes("OBSTRU")) return "Pendente";
+  return "Confirmada";
+}
+
 function salesMetrics(rows) {
   const today = todayISO();
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
   const weekIso = weekAgo.toISOString().slice(0, 10);
   const month = today.slice(0, 7);
-  const confirmed = rows.filter((sale) => sale.status !== "Cancelada");
-  const goal = state.data.sellers.reduce((sum, seller) => sum + Number(seller.goal || 0), 0);
+  const confirmed = rows.filter((sale) => saleStatusLabel(sale) !== "Cancelada");
+  const goal = visibleCommercialSellers().reduce((sum, seller) => sum + Number(seller.goal || 0), 0);
   return `<div class="grid cols-5">
-    ${metric("Vendas do dia", rows.filter((sale) => String(sale.date || "").slice(0, 10) === today).length)}
-    ${metric("Semana", rows.filter((sale) => String(sale.date || "").slice(0, 10) >= weekIso).length)}
-    ${metric("Mês", rows.filter((sale) => String(sale.date || "").startsWith(month)).length)}
+    ${metric("Vendas do dia", confirmed.filter((sale) => String(sale.date || "").slice(0, 10) === today).length)}
+    ${metric("Semana", confirmed.filter((sale) => String(sale.date || "").slice(0, 10) >= weekIso).length)}
+    ${metric("Mês", confirmed.filter((sale) => String(sale.date || "").startsWith(month)).length)}
     ${metric("Meta", goal)}
     ${metric("Conversão", `${confirmed.length}/${rows.length || 0}`)}
+  </div>
+  <div class="grid cols-5">
+    ${metric("Venda nova", rows.filter((sale) => saleTypeLabel(sale) === "Venda nova").length)}
+    ${metric("Repetidor", rows.filter((sale) => saleTypeLabel(sale) === "Repetidor de sinal").length)}
+    ${metric("Upgrade", rows.filter((sale) => saleTypeLabel(sale) === "Upgrade").length)}
+    ${metric("Downgrade", rows.filter((sale) => saleTypeLabel(sale) === "Downgrade").length)}
+    ${metric("Cancelamentos", rows.filter((sale) => saleTypeLabel(sale) === "Cancelamento" || saleStatusLabel(sale) === "Cancelada").length)}
   </div>`;
 }
 
@@ -1214,6 +1288,16 @@ function bindPageEvents() {
     state.scheduleView = button.dataset.scheduleView;
     render();
   }));
+  $("[data-schedule-week]")?.addEventListener("change", (event) => {
+    state.scheduleWeekStart = currentMondayISO(new Date(`${event.target.value || todayISO()}T12:00:00`));
+    render();
+  });
+  document.querySelectorAll("[data-schedule-week-nav]").forEach((button) => button.addEventListener("click", () => {
+    const base = new Date(`${state.scheduleWeekStart || currentMondayISO()}T12:00:00`);
+    base.setDate(base.getDate() + Number(button.dataset.scheduleWeekNav || 0));
+    state.scheduleWeekStart = currentMondayISO(base);
+    render();
+  }));
   $("[data-report-filter]")?.addEventListener("change", (event) => {
     state.reportFilter = event.target.value;
     render();
@@ -1238,6 +1322,7 @@ function bindPageEvents() {
   $("[data-import-schedule-pdf]")?.addEventListener("change", importWeeklySchedulePdf);
   $("[data-import-week-start]")?.addEventListener("change", (event) => {
     state.scheduleImport.weekStart = event.target.value || currentMondayISO();
+    state.scheduleWeekStart = state.scheduleImport.weekStart;
     if (state.scheduleImport.rawText) {
       state.scheduleImport.rows = parseWeeklyScheduleText(state.scheduleImport.rawText, state.scheduleImport.weekStart);
     }
@@ -1408,8 +1493,8 @@ function openForm(collection, item = {}) {
     modal.remove();
     await loadAll();
     render();
-    if (collection === "weeklySchedules" && scheduleSellerEmails(saved).length && confirm("Abrir convite semanal no Google Agenda para enviar aos consultores?")) {
-      openCalendar(`weeklySchedules:${saved.id}`);
+    if (collection === "weeklySchedules" && scheduleSellerEmails(saved).length && confirm("Abrir email com a programação da semana para os consultores?")) {
+      openWeeklyScheduleEmail(`weeklySchedules:${saved.id}`);
     }
   });
   document.body.appendChild(modal);
@@ -1509,18 +1594,16 @@ function scheduleReminder(item) {
   return `<strong>${escapeHtml(info.title)}</strong><small>${escapeHtml(info.detail)}</small>`;
 }
 
-function weekDays() {
-  const base = new Date();
-  const start = new Date(base);
-  start.setDate(base.getDate() - base.getDay() + 1);
-  return Array.from({ length: 5 }, (_, index) => {
+function weekDays(weekStart = currentMondayISO()) {
+  const start = new Date(`${weekStart || currentMondayISO()}T12:00:00`);
+  return Array.from({ length: 6 }, (_, index) => {
     const day = new Date(start);
     day.setDate(start.getDate() + index);
     return day;
   });
 }
 
-function weeklyBoard(rows) {
+function weeklyBoard(rows, weekStart = currentMondayISO()) {
   const byDate = new Map();
   rows.forEach((item) => {
     const key = item.date || "";
@@ -1528,7 +1611,7 @@ function weeklyBoard(rows) {
     byDate.get(key).push(item);
   });
   return `<div class="weekly-board">
-    ${weekDays().map((day) => {
+    ${weekDays(weekStart).map((day) => {
       const iso = day.toISOString().slice(0, 10);
       const items = byDate.get(iso) || [];
       return `<section class="week-column">
@@ -1556,8 +1639,7 @@ function scheduleCard(item) {
     <p>${escapeHtml(info.title)}</p>
     <div class="row-actions">
       <button class="secondary" data-edit="weeklySchedules:${item.id}">Editar</button>
-      <button class="secondary" data-calendar="weeklySchedules:${item.id}">Agenda</button>
-      <button class="secondary" data-email="weeklySchedules:${item.id}">Email equipe</button>
+      <button class="secondary" data-email="weeklySchedules:${item.id}">Enviar equipe</button>
       <button class="secondary" data-map="${escapeHtml(item.address || condo?.address || "")}">Mapa</button>
       <button class="danger" data-delete="weeklySchedules:${item.id}">Excluir</button>
     </div>
@@ -1715,7 +1797,7 @@ function scheduleHistoryRows(options = {}) {
       followUpDays: 30
     });
   });
-  state.data.sales.forEach((sale) => {
+  visibleSalesRows().forEach((sale) => {
     if (!sale.condoId || !sale.date) return;
     const condo = findById("condos", sale.condoId);
     const row = ensureRow(sale.condoId, { condoName: sale.condoName || condo?.name, address: condo?.address || "" });
@@ -1994,15 +2076,24 @@ async function saveSettings(event) {
   render();
 }
 
-async function importSales() {
-  const url = $("#salesSheetForm input[name='salesSheetUrl']")?.value || state.settings.salesSheetUrl;
+function startSalesAutoSync() {
+  clearInterval(salesAutoTimer);
+  if (!state.user) return;
+  const run = () => importSales({ silent: true, auto: true });
+  salesAutoTimer = setInterval(run, SALES_AUTO_SYNC_MS);
+  setTimeout(run, 3500);
+}
+
+async function importSales(options = {}) {
+  const silent = options?.silent === true;
+  const url = $("#salesSheetForm input[name='salesSheetUrl']")?.value || state.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL;
   try {
-    const result = await request("/api/sales/import", { method: "POST", body: { url } });
-    alert(`${result.imported} venda(s) importada(s).`);
+    const result = await request("/api/sales/import", { method: "POST", body: { url, silent } });
+    if (!silent) alert(`${result.imported} venda(s) importada(s).`);
     await loadAll();
-    render();
+    if (!silent || (["sales", "sellers", "dashboard", "reports"].includes(state.page) && !document.querySelector(".modal-backdrop"))) render();
   } catch (error) {
-    alert(error.message);
+    if (!silent) alert(error.message);
   }
 }
 
@@ -2479,7 +2570,9 @@ async function commitScheduleImport() {
     imported += 1;
   }
   await loadAll();
-  state.scheduleImport = { status: "done", fileName: "", message: `${imported} rota(s) lançada(s). ${duplicates} duplicada(s) ignorada(s).`, rows: [], rawText: "", weekStart: currentMondayISO() };
+  const launchedWeek = rows[0]?.date ? currentMondayISO(new Date(`${rows[0].date}T12:00:00`)) : state.scheduleImport.weekStart || currentMondayISO();
+  state.scheduleWeekStart = launchedWeek;
+  state.scheduleImport = { status: "done", fileName: "", message: `${imported} rota(s) lançada(s). ${duplicates} duplicada(s) ignorada(s). Semanas anteriores continuam salvas no histórico.`, rows: [], rawText: "", weekStart: launchedWeek };
   render();
 }
 
@@ -2521,6 +2614,7 @@ function closeToast(key) {
 }
 
 function openCalendar(ref) {
+  if (String(ref).startsWith("weeklySchedules:")) return openWeeklyScheduleEmail(ref);
   const event = eventFromRef(ref);
   if (!event) return;
   const start = new Date(event.date || Date.now());
@@ -2542,7 +2636,7 @@ function openEmail(ref) {
   if (!event) return;
   const to = event.attendees?.length ? event.attendees.join(",") : state.settings.notificationEmail || state.settings.adminEmail || "";
   const subject = `Programação - ${event.title}`;
-  const body = `Sistema de Gestão Comercial\n\nAtividade: ${event.title}\nData: ${fmtDateTime(event.date)}\nStatus: ${event.status}\nEndereço: ${event.location || "-"}\n\nObs:\n${event.note || ""}\n\nPara incluir na agenda, abra o botão Agenda da programação e salve o convite.`;
+  const body = `Sistema de Gestão Comercial\n\nAtividade: ${event.title}\nData: ${fmtDateTime(event.date)}\nStatus: ${event.status}\nEndereço: ${event.location || "-"}\n\nObs:\n${event.note || ""}`;
   location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
@@ -2774,7 +2868,7 @@ function activeReportFilter() {
 
 function reportMetricRows(filter = state.reportFilter) {
   const month = new Date().toISOString().slice(0, 7);
-  const salesMonth = state.data.sales.filter((sale) => String(sale.date || "").startsWith(month));
+  const salesMonth = visibleSalesRows().filter((sale) => String(sale.date || "").startsWith(month));
   const revenue = salesMonth.reduce((sum, sale) => sum + Number(sale.value || 0), 0);
   const openVisits = state.data.visits.filter((visit) => !["Finalizado", "Visitado", "Concluida", "Concluída"].includes(visit.status)).length;
   const openExpansions = state.data.expansions.filter((item) => !["Concluído", "Reprovado"].includes(item.status)).length;
@@ -2789,7 +2883,7 @@ function reportMetricRows(filter = state.reportFilter) {
       ["Vendas no mês", salesMonth.length],
       ["Receita do mês", money(revenue)],
       ["Ticket médio", money(salesMonth.length ? revenue / salesMonth.length : 0)],
-      ["Meta de vendas", state.data.sellers.reduce((sum, seller) => sum + Number(seller.goal || 0), 0)]
+      ["Meta de vendas", visibleCommercialSellers().reduce((sum, seller) => sum + Number(seller.goal || 0), 0)]
     ],
     visitas: [
       ["Relacionamentos", state.data.visits.length],
@@ -2867,23 +2961,24 @@ function reportSalesSection() {
 }
 
 function reportLatestSalesSection() {
-  const rows = [...state.data.sales]
+  const rows = [...visibleSalesRows()]
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
     .slice(0, 12)
     .map((sale) => [
       fmtDate(sale.date),
-      findById("sellers", sale.sellerId)?.name || "-",
+      saleSellerName(sale) || "-",
+      saleTypeLabel(sale),
       sale.customer || "-",
       findById("condos", sale.condoId)?.name || sale.condoName || "-",
       findById("plans", sale.planId)?.name || sale.planName || "-",
       money(sale.value),
-      sale.status || "Confirmada"
+      saleStatusLabel(sale)
     ]);
-  return reportSection("Vendas recentes", ["Data", "Vendedor", "Cliente", "Condomínio", "Plano", "Valor", "Status"], rows);
+  return reportSection("Vendas recentes", ["Data", "Vendedor", "Tipo", "Cliente", "Condomínio", "Plano", "Valor", "Status"], rows);
 }
 
 function reportSalesStatusSection() {
-  return reportSection("Vendas por status", ["Status", "Quantidade"], counts(state.data.sales, "status").map((row) => [row.label, row.value]));
+  return reportSection("Vendas por status", ["Status", "Quantidade"], counts(visibleSalesRows().map((sale) => ({ status: saleStatusLabel(sale) })), "status").map((row) => [row.label, row.value]));
 }
 
 function reportRelationshipSection() {
@@ -2992,7 +3087,8 @@ function downloadReportExcel() {
 }
 
 function copyWeeklySchedule() {
-  navigator.clipboard.writeText(buildWeeklyScheduleText())
+  const period = schedulePeriodFromDate(state.scheduleWeekStart || todayISO());
+  navigator.clipboard.writeText(buildWeeklyScheduleText({ period }))
     .then(() => alert("Programação copiada para enviar ao grupo."));
 }
 
@@ -3002,7 +3098,7 @@ function downloadWeeklySchedule() {
 
 function openScheduleDownloadModal() {
   const modal = $("#modalTemplate").content.firstElementChild.cloneNode(true);
-  const period = schedulePeriodFromDate(todayISO());
+  const period = schedulePeriodFromDate(state.scheduleWeekStart || todayISO());
   modal.querySelector("h3").textContent = "Baixar programação";
   modal.querySelector(".modal-body").innerHTML = `
     <div class="form-grid">
@@ -3315,10 +3411,11 @@ function reportExportRows(filter = state.reportFilter) {
   const selected = selectedReportOptions(filter);
   const rows = [["Área", "Bloco", "Campo 1", "Campo 2", "Campo 3", "Campo 4", "Campo 5", "Campo 6", "Campo 7"]];
   const push = (block, dataRows) => dataRows.forEach((row) => rows.push([reportLabel(filter), block, ...row]));
+  const visibleSales = visibleSalesRows();
   if (selected.has("metrics")) push("Indicadores", reportMetricRows(filter));
   if (selected.has("salesRanking")) push("Ranking comercial", sellerRanking().slice(0, 12).map((row) => [row.name, row.count, money(row.value), `${row.conversion}%`]));
-  if (selected.has("latestSales")) push("Vendas recentes", [...state.data.sales].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 20).map((sale) => [fmtDate(sale.date), findById("sellers", sale.sellerId)?.name || "-", sale.customer || "-", findById("condos", sale.condoId)?.name || sale.condoName || "-", money(sale.value), sale.status || "Confirmada"]));
-  if (selected.has("salesStatus")) push("Status das vendas", counts(state.data.sales, "status").map((row) => [row.label, row.value]));
+  if (selected.has("latestSales")) push("Vendas recentes", [...visibleSales].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 20).map((sale) => [fmtDate(sale.date), saleSellerName(sale) || "-", saleTypeLabel(sale), sale.customer || "-", findById("condos", sale.condoId)?.name || sale.condoName || "-", money(sale.value), saleStatusLabel(sale)]));
+  if (selected.has("salesStatus")) push("Status das vendas", counts(visibleSales.map((sale) => ({ status: saleStatusLabel(sale) })), "status").map((row) => [row.label, row.value]));
   if (selected.has("relationships")) push("Relacionamento prioritário", state.data.visits.filter((visit) => !["Finalizado", "Visitado"].includes(visit.status)).slice(0, 20).map((visit) => [findById("condos", visit.condoId)?.name || visit.condoName || "-", visit.status || "-", visit.relationship || "-", fmtDate(visit.nextVisit || visit.date)]));
   if (selected.has("upcomingVisits")) push("Próximas visitas", upcomingEvents().filter((event) => event.type === "visits").slice(0, 20).map((event) => [fmtDateTime(event.date), event.title, event.status || "-", event.location || "-"]));
   if (selected.has("condoPriorities")) {
@@ -3344,7 +3441,7 @@ function reportExportRows(filter = state.reportFilter) {
 }
 
 function reportCards() {
-  const sales = state.data.sales;
+  const sales = visibleSalesRows();
   const visits = state.data.visits;
   const expansions = state.data.expansions;
   return `<div class="grid cols-4">
@@ -3385,8 +3482,12 @@ function filteredWithPage(page, rows = state.data[page] || []) {
     if (filters.from && String(item.date || item.expectedDate || "").slice(0, 10) < filters.from) return false;
     if (filters.to && String(item.date || item.expectedDate || "").slice(0, 10) > filters.to) return false;
     if (filters.date && String(item.date || "").slice(0, 10) !== filters.date) return false;
-    if (filters.status && String(item.status || "") !== filters.status) return false;
+    if (filters.status) {
+      const value = page === "sales" ? saleStatusLabel(item) : String(item.status || "");
+      if (value !== filters.status) return false;
+    }
     if (filters.type && String(item.type || "") !== filters.type) return false;
+    if (filters.saleType && saleTypeLabel(item) !== filters.saleType) return false;
     if (filters.seller && !matchesSeller(item, filters.seller)) return false;
     if (filters.condo && !matchesCondo(item, filters.condo)) return false;
     if (filters.plan && String(item.planId || "") !== String(filters.plan)) return false;
@@ -3435,8 +3536,9 @@ function alertKey(event) {
 
 function sellerRanking() {
   const month = new Date().toISOString().slice(0, 7);
-  return state.data.sellers.map((seller) => {
-    const sales = state.data.sales.filter((sale) => sale.sellerId === seller.id && String(sale.date || "").startsWith(month));
+  const visibleSales = visibleSalesRows();
+  return visibleCommercialSellers().map((seller) => {
+    const sales = visibleSales.filter((sale) => sale.sellerId === seller.id && String(sale.date || "").startsWith(month));
     const conversion = seller.goal ? Math.round((sales.length / Number(seller.goal || 1)) * 100) : 0;
     return { id: seller.id, name: seller.name, count: sales.length, value: sales.reduce((sum, sale) => sum + Number(sale.value || 0), 0), conversion };
   }).sort((a, b) => b.count - a.count || b.value - a.value);

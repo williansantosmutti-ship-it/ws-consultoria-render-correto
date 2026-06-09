@@ -16,7 +16,18 @@ const INITIAL_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "8883e3d32b8ea8
 const ITERATIONS = 120000;
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_HOURS || 12) * 60 * 60 * 1000;
 const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES || 1024 * 1024);
+const DEFAULT_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1VUVzx5q_emUtQtj0k2IG_6Nv2vwIrPcVRLw74UcWb4Y/edit?gid=161138712#gid=161138712";
+const SALES_IMPORT_INTERVAL_MS = Number(process.env.SALES_IMPORT_INTERVAL_MS || 60000);
+const DISABLE_SALES_AUTO_IMPORT = String(process.env.DISABLE_SALES_AUTO_IMPORT || "").toLowerCase() === "true";
+const ALLOWED_SALES_SELLERS = new Map([
+  ["IVAN", "IVAN"],
+  ["LUISE", "LUISE"],
+  ["ISIS", "ISIS"],
+  ["BRUNA", "BRUNA"],
+  ["ADRIELE", "ADRIELE"]
+]);
 const loginAttempts = new Map();
+let salesImportRunning = false;
 
 const sessions = new Map();
 
@@ -50,7 +61,7 @@ function defaultStore() {
       logoUrl: "",
       primaryColor: "#13251f",
       accentColor: "#c9a227",
-      salesSheetUrl: "",
+      salesSheetUrl: DEFAULT_SALES_SHEET_URL,
       theme: "dark"
     },
     users: [
@@ -86,8 +97,12 @@ function defaultStore() {
 function seller(name) {
   const emails = {
     "Ivan Carvalho": "ivan.carvalho@usetelecom.com.br",
+    IVAN: "ivan.carvalho@usetelecom.com.br",
     "Isis Silva": "isis.santos@bahiainternet.com.br",
+    ISIS: "isis.santos@bahiainternet.com.br",
     "Bruna Marcela": "bruna.silva@usetelecom.com.br",
+    BRUNA: "bruna.silva@usetelecom.com.br",
+    ADRIELE: "adriele.silva@usetelecom.com.br",
     "Adriele Santos": "adriele.silva@usetelecom.com.br"
   };
   return {
@@ -271,7 +286,7 @@ function ensureShape(db) {
     logoUrl: "",
     primaryColor: "#13251f",
     accentColor: "#c9a227",
-    salesSheetUrl: "",
+    salesSheetUrl: DEFAULT_SALES_SHEET_URL,
     theme: "dark",
     ...db.settings
   };
@@ -391,30 +406,84 @@ function findPlanId(db, name) {
   return db.plans.find((plan) => plan.name.toLowerCase() === String(name || "").toLowerCase())?.id || "";
 }
 
+function normalizeTextKey(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]+/gi, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function sellerFirstKey(name) {
+  return normalizeTextKey(name).split(" ")[0] || "";
+}
+
+function isAllowedSalesSeller(name) {
+  return ALLOWED_SALES_SELLERS.has(sellerFirstKey(name));
+}
+
+function findAllowedSellerId(db, name) {
+  const key = sellerFirstKey(name);
+  if (!ALLOWED_SALES_SELLERS.has(key)) return "";
+  const found = db.sellers.find((item) => sellerFirstKey(item.name) === key);
+  if (found) return found.id;
+  const created = seller(ALLOWED_SALES_SELLERS.get(key));
+  db.sellers.unshift(created);
+  return created.id;
+}
+
+function classifySale(row, map) {
+  const text = normalizeTextKey([
+    rowValue(row, map, ["tipo", "tipo venda", "tipo da venda", "categoria", "modalidade"]),
+    rowValue(row, map, ["produto", "servico", "serviço", "plano"]),
+    rowValue(row, map, ["status", "situacao", "situação", "motivo"]),
+    rowValue(row, map, ["obs", "observacao", "observação", "observacoes", "observações"])
+  ].join(" "));
+  if (text.includes("CANCEL")) return "Cancelamento";
+  if (text.includes("REPETIDOR")) return "Repetidor de sinal";
+  if (text.includes("DOWNGRADE") || text.includes("DOWGRAD")) return "Downgrade";
+  if (text.includes("UPGRADE")) return "Upgrade";
+  return "Venda nova";
+}
+
+function normalizeSaleStatus(rawStatus, type) {
+  const text = normalizeTextKey(`${rawStatus || ""} ${type || ""}`);
+  if (text.includes("CANCEL")) return "Cancelada";
+  if (text.includes("AGUARD") || text.includes("PENDENTE") || text.includes("OBSTRU")) return "Pendente";
+  return "Confirmada";
+}
+
 function importSalesRows(db, rows) {
   if (rows.length < 2) return 0;
   const header = rows.shift();
   const map = Object.fromEntries(header.map((cell, index) => [normalizeHeader(cell), index]));
   let imported = 0;
   for (const row of rows) {
-    const sellerName = rowValue(row, map, ["vendedor", "consultor", "consultora", "nome do vendedor", "colaborador"]);
+    const sellerName = rowValue(row, map, ["vendedor", "consultor", "consultora", "nome do vendedor", "colaborador", "responsavel", "responsável", "vendedor responsavel", "vendedor responsável"]);
+    if (!isAllowedSalesSeller(sellerName)) continue;
     const customer = rowValue(row, map, ["cliente", "assinante", "nome", "nome cliente"]);
-    const planName = rowValue(row, map, ["plano", "produto", "servico", "serviço"]);
+    const planName = rowValue(row, map, ["plano", "produto", "servico", "serviço", "plano contratado"]);
     const date = normalizeSheetDate(rowValue(row, map, ["data", "data da venda", "criado em", "dt venda"]));
-    const value = normalizeMoney(rowValue(row, map, ["valor", "preco", "preço", "mensalidade", "total"]));
-    if (!sellerName && !customer) continue;
-    const externalKey = [date, sellerName, customer, planName].join("|").toLowerCase();
+    const value = normalizeMoney(rowValue(row, map, ["valor", "preco", "preço", "mensalidade", "total", "valor plano"]));
+    const type = classifySale(row, map);
+    const rawStatus = rowValue(row, map, ["status", "situacao", "situação"]);
+    if (!customer && !planName) continue;
+    const externalKey = [date, sellerFirstKey(sellerName), customer, planName, type].join("|").toLowerCase();
     if (db.sales.some((sale) => sale.externalKey === externalKey)) continue;
     db.sales.unshift({
       id: uid(),
       date,
-      sellerId: findOrCreateSeller(db, sellerName),
+      sellerId: findAllowedSellerId(db, sellerName),
+      sellerName: ALLOWED_SALES_SELLERS.get(sellerFirstKey(sellerName)),
       planId: findPlanId(db, planName),
       planName,
+      type,
       customer,
-      condoName: rowValue(row, map, ["condominio", "condomínio", "bairro", "endereco", "endereço"]),
+      condoName: rowValue(row, map, ["condominio", "condomínio", "edificio", "edifício", "bairro", "endereco", "endereço"]),
       value,
-      status: rowValue(row, map, ["status"]) || "Confirmada",
+      status: normalizeSaleStatus(rawStatus, type),
+      rawStatus,
       notes: rowValue(row, map, ["obs", "observacao", "observação", "observacoes", "observações"]),
       source: "Planilha online",
       externalKey,
@@ -424,6 +493,40 @@ function importSalesRows(db, rows) {
     imported += 1;
   }
   return imported;
+}
+
+async function importSalesFromUrl(db, url) {
+  const sourceUrl = googleSheetCsvUrl(url || db.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL);
+  if (!sourceUrl) throw new Error("Informe o link da planilha do Google Sheets.");
+  const response = await fetch(sourceUrl);
+  if (!response.ok) throw new Error("Nao foi possivel ler a planilha. Confira se ela esta publicada/compartilhada para leitura.");
+  const rows = parseCsv(await response.text());
+  if (rows.length < 2) throw new Error("A planilha nao tem linhas para importar.");
+  const imported = importSalesRows(db, rows);
+  db.settings.salesSheetUrl = url || db.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL;
+  db.settings.salesImportAt = new Date().toISOString();
+  db.settings.salesImportStatus = imported ? `${imported} venda(s) nova(s) importada(s)` : "Sem novas vendas";
+  return imported;
+}
+
+async function runAutomaticSalesImport() {
+  if (salesImportRunning) return 0;
+  salesImportRunning = true;
+  try {
+    const db = ensureShape(readStore());
+    const imported = await importSalesFromUrl(db, db.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL);
+    if (imported) addActivity(db, { name: "Sistema" }, "Importou vendas automaticamente", `${imported} venda(s) pela planilha online`);
+    writeStore(db);
+    return imported;
+  } catch (error) {
+    const db = ensureShape(readStore());
+    db.settings.salesImportAt = new Date().toISOString();
+    db.settings.salesImportStatus = `Erro: ${error.message}`;
+    writeStore(db);
+    return 0;
+  } finally {
+    salesImportRunning = false;
+  }
 }
 
 async function api(req, res) {
@@ -488,19 +591,17 @@ async function api(req, res) {
       const rows = parseCsv(body.csvText);
       if (rows.length < 2) return send(res, 400, { error: "Cole os dados com cabecalho e pelo menos uma venda." });
       const imported = importSalesRows(db, rows);
-      addActivity(db, user, "Importou vendas", `${imported} venda(s) colada(s) da planilha`);
+      if (imported || !body.silent) addActivity(db, user, "Importou vendas", `${imported} venda(s) colada(s) da planilha`);
       writeStore(db);
       return send(res, 200, { imported });
     }
-    const sourceUrl = googleSheetCsvUrl(body.url || db.settings.salesSheetUrl);
-    if (!sourceUrl) return send(res, 400, { error: "Informe o link da planilha do Google Sheets." });
-    const response = await fetch(sourceUrl);
-    if (!response.ok) return send(res, 400, { error: "Nao foi possivel ler a planilha. Confira se ela esta publicada/compartilhada para leitura." });
-    const rows = parseCsv(await response.text());
-    if (rows.length < 2) return send(res, 400, { error: "A planilha nao tem linhas para importar." });
-    const imported = importSalesRows(db, rows);
-    db.settings.salesSheetUrl = body.url || sourceUrl;
-    addActivity(db, user, "Importou vendas", `${imported} venda(s) pela planilha online`);
+    let imported = 0;
+    try {
+      imported = await importSalesFromUrl(db, body.url || db.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL);
+    } catch (error) {
+      return send(res, 400, { error: error.message });
+    }
+    if (imported || !body.silent) addActivity(db, user, "Importou vendas", `${imported} venda(s) pela planilha online`);
     writeStore(db);
     return send(res, 200, { imported });
   }
@@ -575,6 +676,11 @@ setInterval(() => {
     if (now - session.createdAt > SESSION_TTL_MS) sessions.delete(sid);
   }
 }, 10 * 60 * 1000).unref();
+
+if (!DISABLE_SALES_AUTO_IMPORT) {
+  setInterval(runAutomaticSalesImport, SALES_IMPORT_INTERVAL_MS).unref();
+  setTimeout(runAutomaticSalesImport, 5000).unref();
+}
 
 http.createServer((req, res) => {
   if (req.url.startsWith("/api/")) {

@@ -6,7 +6,7 @@
     "logoUrl": "/assets/ws-logo.png",
     "primaryColor": "#080D13",
     "accentColor": "#D6AD4F",
-    "salesSheetUrl": "https://docs.google.com/spreadsheets/d/1VUVzx5q_emUtQtj0k2IG_6Nv2vwIrPcVRLw74UcWb4Y/edit?gid=0#gid=0",
+    "salesSheetUrl": "https://docs.google.com/spreadsheets/d/1VUVzx5q_emUtQtj0k2IG_6Nv2vwIrPcVRLw74UcWb4Y/edit?gid=161138712#gid=161138712",
     "theme": "dark",
     "integrationNotes": "Lembretes aparecem na tela e podem usar notificaÃ§Ãµes do navegador. Email automÃ¡tico e Google Agenda direto precisam de credenciais SMTP e Google Calendar API."
   },
