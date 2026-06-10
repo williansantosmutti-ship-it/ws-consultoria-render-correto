@@ -667,12 +667,12 @@ async function sendScheduleCalendarInvite(db, item, user, forced = false) {
   if (!emails.length) {
     item.calendarInviteStatus = "Pendente: nenhum email de consultor cadastrado";
     item.calendarInviteUpdatedAt = new Date().toISOString();
-    return { sent: false, skipped: "missing-seller-email" };
+    return { sent: false, skipped: "missing-seller-email", status: item.calendarInviteStatus };
   }
   if (!smtpReady(db.settings)) {
     item.calendarInviteStatus = "Pendente: configure SMTP em Empresa";
     item.calendarInviteUpdatedAt = new Date().toISOString();
-    return { sent: false, skipped: "missing-smtp" };
+    return { sent: false, skipped: "missing-smtp", status: item.calendarInviteStatus };
   }
   try {
     const nodemailer = getNodemailer();
@@ -698,12 +698,12 @@ async function sendScheduleCalendarInvite(db, item, user, forced = false) {
     item.calendarInviteUpdatedAt = item.calendarInviteSentAt;
     item.calendarInviteStatus = `Enviado para ${emails.join(", ")}`;
     addActivity(db, user || { name: "Sistema" }, "Enviou Google Agenda", `${condo.name || item.condoName || item.id}: ${emails.join(", ")}`);
-    return { sent: true, emails };
+    return { sent: true, emails, status: item.calendarInviteStatus };
   } catch (error) {
     item.calendarInviteStatus = `Erro ao enviar agenda: ${error.message}`;
     item.calendarInviteUpdatedAt = new Date().toISOString();
     addActivity(db, user || { name: "Sistema" }, "Falhou Google Agenda", item.calendarInviteStatus);
-    return { sent: false, error: error.message };
+    return { sent: false, error: error.message, status: item.calendarInviteStatus };
   }
 }
 
@@ -927,7 +927,7 @@ async function api(req, res) {
     if (!item) return send(res, 404, { error: "Programacao nao encontrada." });
     const result = await sendScheduleCalendarInvite(db, item, user, true);
     writeStore(db);
-    return send(res, result.error ? 400 : 200, result);
+    return send(res, 200, result);
   }
 
   const name = collectionName(url.pathname);
