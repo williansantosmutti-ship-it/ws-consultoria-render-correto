@@ -170,7 +170,7 @@ async function logout() {
 async function loadAll() {
   state.data = await request("/api/all");
   state.settings = state.data.settings;
-  for (const key of ["condos", "visits", "sellers", "sales", "plans", "expansions", "weeklySchedules", "activities", "users"]) {
+  for (const key of ["condos", "visits", "sellers", "sales", "plans", "expansions", "weeklySchedules", "activities", "users", "deletedRefs"]) {
     if (!Array.isArray(state.data[key])) state.data[key] = [];
   }
   await loadMapLayers();
@@ -2662,14 +2662,33 @@ async function commitScheduleImport() {
 }
 
 function isDuplicateImportedSchedule(row) {
-  const sellerKey = row.sellerIds.join(",");
+  if (isDeletedImportedSchedule(row)) return true;
+  const sellerKey = [...row.sellerIds].map(String).sort().join(",");
   return state.data.weeklySchedules.some((item) => {
     const itemSellerIds = Array.isArray(item.sellerIds) && item.sellerIds.length ? item.sellerIds : [item.sellerId].filter(Boolean);
     return String(item.date || "") === row.date
       && String(item.condoId || "") === row.condoId
       && String(item.startTime || "") === row.startTime
-      && itemSellerIds.join(",") === sellerKey;
+      && itemSellerIds.map(String).sort().join(",") === sellerKey;
   });
+}
+
+function importedScheduleDeletedKey(row) {
+  const sellerIds = Array.isArray(row.sellerIds) && row.sellerIds.length ? row.sellerIds : [row.sellerId].filter(Boolean);
+  return `weeklySchedules:import:${[
+    String(row.date || "").slice(0, 10),
+    String(row.condoId || normalizeKey(row.condoName || row.condo || "")),
+    String(row.startTime || ""),
+    String(row.endTime || ""),
+    sellerIds.map(String).sort().join(","),
+    normalizeKey(row.workArea || ""),
+    normalizeKey(row.accessMode || "")
+  ].join("|").toLowerCase()}`;
+}
+
+function isDeletedImportedSchedule(row) {
+  const key = importedScheduleDeletedKey(row);
+  return state.data.deletedRefs.some((ref) => ref.key === key);
 }
 
 async function removeItem(collection, id) {

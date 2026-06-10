@@ -9,8 +9,11 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
-const DATA_DIR = path.join(ROOT, "data");
+const DEFAULT_DATA_DIR = fs.existsSync("/var/data") ? "/var/data" : path.join(ROOT, "data");
+const DATA_DIR = process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH || DEFAULT_DATA_DIR;
 const STORE_FILE = path.join(DATA_DIR, "store.json");
+const SEED_STORE_FILE = path.join(ROOT, "data", "store.json");
+const BACKUP_DIR = path.join(DATA_DIR, "backups");
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "williansantos.mutti@gmail.com";
 const INITIAL_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "8883e3d32b8ea89f7032952b323f6f67:90b10f284da16aa86abd7f59612fb357195f276b6310fd8850907d8b1ff3ffad";
 const ITERATIONS = 120000;
@@ -47,7 +50,13 @@ function loadEnv() {
 function ensureStore() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(STORE_FILE)) {
-    writeStore(defaultStore());
+    const seed = path.resolve(SEED_STORE_FILE);
+    const target = path.resolve(STORE_FILE);
+    if (seed !== target && fs.existsSync(seed)) {
+      fs.copyFileSync(seed, STORE_FILE);
+    } else {
+      writeStore(defaultStore());
+    }
   }
 }
 
@@ -90,7 +99,8 @@ function defaultStore() {
     expansions: [],
     weeklySchedules: [],
     sales: [],
-    activities: []
+    activities: [],
+    deletedRefs: []
   };
 }
 
@@ -125,6 +135,17 @@ function writeStore(data) {
   const tmp = `${STORE_FILE}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
   fs.renameSync(tmp, STORE_FILE);
+  writeDailyBackup(data);
+}
+
+function writeDailyBackup(data) {
+  try {
+    if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const stamp = new Date().toISOString().slice(0, 10);
+    fs.writeFileSync(path.join(BACKUP_DIR, `store-${stamp}.latest.json`), JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.warn(`Nao foi possivel gerar backup diario: ${error.message}`);
+  }
 }
 
 function uid() {
@@ -292,7 +313,7 @@ function ensureShape(db) {
     theme: "dark",
     ...db.settings
   };
-  for (const key of ["users", "sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "sales", "activities"]) {
+  for (const key of ["users", "sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "sales", "activities", "deletedRefs"]) {
     if (!Array.isArray(db[key])) db[key] = [];
   }
   return db;
@@ -456,6 +477,59 @@ function normalizeSaleStatus(rawStatus, type) {
   return "Confirmada";
 }
 
+function scheduleRouteKey(item) {
+  const sellerIds = Array.isArray(item.sellerIds) && item.sellerIds.length ? item.sellerIds : [item.sellerId].filter(Boolean);
+  return [
+    String(item.date || "").slice(0, 10),
+    String(item.condoId || normalizeTextKey(item.condoName || item.condo || "")),
+    String(item.startTime || ""),
+    String(item.endTime || ""),
+    sellerIds.map(String).sort().join(","),
+    normalizeTextKey(item.workArea || ""),
+    normalizeTextKey(item.accessMode || "")
+  ].join("|").toLowerCase();
+}
+
+function saleExternalDeletedKey(externalKey) {
+  return `sales:external:${String(externalKey || "").toLowerCase()}`;
+}
+
+function saleImportKey(item) {
+  return String(item.externalKey || [
+    String(item.date || "").slice(0, 10),
+    sellerFirstKey(item.sellerName || item.seller || ""),
+    item.customer || "",
+    item.planName || "",
+    item.type || ""
+  ].join("|")).toLowerCase();
+}
+
+function scheduleImportDeletedKey(item) {
+  return `weeklySchedules:import:${scheduleRouteKey(item)}`;
+}
+
+function isImportedSchedule(item) {
+  return /importado do pdf/i.test(String(item.notes || item.source || ""));
+}
+
+function deletedRefExists(db, key) {
+  return db.deletedRefs.some((ref) => ref.key === key);
+}
+
+function addDeletedRef(db, key, collection, item, user) {
+  if (!key || deletedRefExists(db, key)) return;
+  db.deletedRefs.unshift({
+    id: uid(),
+    key,
+    collection,
+    recordId: item?.id || "",
+    label: item?.name || item?.title || item?.condoName || item?.customer || item?.code || item?.id || "",
+    deletedAt: new Date().toISOString(),
+    user: user?.name || "Sistema"
+  });
+  db.deletedRefs = db.deletedRefs.slice(0, 5000);
+}
+
 function importSalesRows(db, rows) {
   if (rows.length < 2) return 0;
   const header = rows.shift();
@@ -472,6 +546,7 @@ function importSalesRows(db, rows) {
     const rawStatus = rowValue(row, map, ["status", "situacao", "situação"]);
     if (!customer && !planName) continue;
     const externalKey = [date, sellerFirstKey(sellerName), customer, planName, type].join("|").toLowerCase();
+    if (deletedRefExists(db, saleExternalDeletedKey(externalKey))) continue;
     if (db.sales.some((sale) => sale.externalKey === externalKey)) continue;
     db.sales.unshift({
       id: uid(),
@@ -547,7 +622,7 @@ async function api(req, res) {
   const method = req.method;
 
   if (url.pathname === "/api/health") {
-    return send(res, 200, { ok: true, name: "WS CONSULTORIA", time: new Date().toISOString() });
+    return send(res, 200, { ok: true, name: "WS CONSULTORIA", time: new Date().toISOString(), dataDir: DATA_DIR });
   }
 
   if (url.pathname === "/api/login" && method === "POST") {
@@ -671,10 +746,13 @@ async function api(req, res) {
 
   if (method === "DELETE") {
     const id = url.pathname.split("/")[3];
-    const before = db[name].length;
+    const removed = db[name].find((item) => item.id === id);
+    if (!removed) return send(res, 404, { error: "Registro nao encontrado." });
     db[name] = db[name].filter((item) => item.id !== id);
-    if (db[name].length === before) return send(res, 404, { error: "Registro nao encontrado." });
-    addActivity(db, user, `Removeu ${name}`, id);
+    addDeletedRef(db, `${name}:id:${id}`, name, removed, user);
+    if (name === "sales") addDeletedRef(db, saleExternalDeletedKey(saleImportKey(removed)), name, removed, user);
+    if (name === "weeklySchedules" && isImportedSchedule(removed)) addDeletedRef(db, scheduleImportDeletedKey(removed), name, removed, user);
+    addActivity(db, user, `Removeu ${name}`, removed.name || removed.title || removed.condoName || removed.customer || id);
     writeStore(db);
     return send(res, 200, { ok: true });
   }
