@@ -18,9 +18,10 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "williansantos.mutti@gmail.com";
 const INITIAL_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "8883e3d32b8ea89f7032952b323f6f67:90b10f284da16aa86abd7f59612fb357195f276b6310fd8850907d8b1ff3ffad";
 const ITERATIONS = 120000;
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_HOURS || 12) * 60 * 60 * 1000;
-const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES || 1024 * 1024);
-const DEFAULT_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1VUVzx5q_emUtQtj0k2IG_6Nv2vwIrPcVRLw74UcWb4Y/edit?gid=161138712#gid=161138712";
-const SALES_IMPORT_INTERVAL_MS = Number(process.env.SALES_IMPORT_INTERVAL_MS || 60000);
+const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES || 10 * 1024 * 1024);
+const OLD_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1VUVzx5q_emUtQtj0k2IG_6Nv2vwIrPcVRLw74UcWb4Y/edit?gid=161138712#gid=161138712";
+const DEFAULT_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1r1oF6e43liRkKVbIP8h-yf_L6K22fdyzu4g816gtAV8/edit?hl=pt-br&gid=1772567492#gid=1772567492";
+const SALES_IMPORT_INTERVAL_MS = Number(process.env.SALES_IMPORT_INTERVAL_MS || 600000);
 const DISABLE_SALES_AUTO_IMPORT = String(process.env.DISABLE_SALES_AUTO_IMPORT || "").toLowerCase() === "true";
 const ALLOWED_SALES_SELLERS = new Map([
   ["IVAN", "IVAN"],
@@ -29,6 +30,7 @@ const ALLOWED_SALES_SELLERS = new Map([
   ["BRUNA", "BRUNA"],
   ["ADRIELE", "ADRIELE"]
 ]);
+const LOCAL_RESTORE_COLLECTIONS = ["sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "deletedRefs"];
 const loginAttempts = new Map();
 let salesImportRunning = false;
 
@@ -313,6 +315,7 @@ function ensureShape(db) {
     theme: "dark",
     ...db.settings
   };
+  if (!db.settings.salesSheetUrl || db.settings.salesSheetUrl === OLD_SALES_SHEET_URL) db.settings.salesSheetUrl = DEFAULT_SALES_SHEET_URL;
   for (const key of ["users", "sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "sales", "activities", "deletedRefs"]) {
     if (!Array.isArray(db[key])) db[key] = [];
   }
@@ -530,6 +533,43 @@ function addDeletedRef(db, key, collection, item, user) {
   db.deletedRefs = db.deletedRefs.slice(0, 5000);
 }
 
+function localDeletedKeys(db, incoming) {
+  return new Set([...(db.deletedRefs || []), ...((incoming && incoming.deletedRefs) || [])].map((ref) => ref.key).filter(Boolean));
+}
+
+function mergeLocalRestore(db, incoming, user) {
+  const source = incoming && incoming.data ? incoming.data : incoming || {};
+  const deletedKeys = localDeletedKeys(db, source);
+  const result = {};
+  if (source.settings?.salesSheetUrl && (!db.settings.salesSheetUrl || db.settings.salesSheetUrl === OLD_SALES_SHEET_URL)) {
+    db.settings.salesSheetUrl = source.settings.salesSheetUrl;
+  }
+  for (const collection of LOCAL_RESTORE_COLLECTIONS) {
+    const rows = Array.isArray(source[collection]) ? source[collection] : [];
+    result[collection] = 0;
+    if (collection === "deletedRefs") {
+      for (const ref of rows) {
+        if (!ref?.key || deletedRefExists(db, ref.key)) continue;
+        db.deletedRefs.unshift({ ...ref, id: ref.id || uid() });
+        result[collection] += 1;
+      }
+      db.deletedRefs = db.deletedRefs.slice(0, 5000);
+      continue;
+    }
+    const existingIds = new Set(db[collection].map((item) => item.id).filter(Boolean));
+    for (const item of rows) {
+      if (!item?.id || existingIds.has(item.id) || deletedKeys.has(`${collection}:id:${item.id}`)) continue;
+      if (collection === "weeklySchedules" && isImportedSchedule(item) && deletedKeys.has(scheduleImportDeletedKey(item))) continue;
+      db[collection].unshift(item);
+      existingIds.add(item.id);
+      result[collection] += 1;
+    }
+  }
+  const total = Object.values(result).reduce((sum, value) => sum + value, 0);
+  if (total) addActivity(db, user, "Restaurou backup local", `${total} registro(s) recuperado(s) do navegador`);
+  return { restored: total, collections: result };
+}
+
 function importSalesRows(db, rows) {
   if (rows.length < 2) return 0;
   const header = rows.shift();
@@ -668,6 +708,16 @@ async function api(req, res) {
     if (!user) return;
     const db = ensureShape(readStore());
     return send(res, 200, { ...db, users: db.users.map(cleanUser) });
+  }
+
+  if (url.pathname === "/api/local-restore" && method === "POST") {
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const body = await getBody(req);
+    const db = ensureShape(readStore());
+    const result = mergeLocalRestore(db, body, user);
+    if (result.restored) writeStore(db);
+    return send(res, 200, result);
   }
 
   if (url.pathname === "/api/sales/import" && method === "POST") {

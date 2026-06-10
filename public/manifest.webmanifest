@@ -1,7 +1,7 @@
 {
-  "name": "WS CONSULTORIA - SISTEMA DE GESTAO COMERCIAL",
-  "short_name": "WS CONSULTORIA",
-  "description": "SISTEMA DE GESTAO COMERCIAL DA WS CONSULTORIA",
+  "name": "Sistema de Gestao",
+  "short_name": "Sistema",
+  "description": "Sistema de gestao operacional e comercial",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

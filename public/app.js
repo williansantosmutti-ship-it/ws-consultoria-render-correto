@@ -27,8 +27,11 @@ const state = {
   dismissedAlerts: new Set(JSON.parse(localStorage.getItem("ws-dismissed-alerts") || "[]"))
 };
 
-const DEFAULT_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1VUVzx5q_emUtQtj0k2IG_6Nv2vwIrPcVRLw74UcWb4Y/edit?gid=161138712#gid=161138712";
-const SALES_AUTO_SYNC_MS = 60000;
+const OLD_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1VUVzx5q_emUtQtj0k2IG_6Nv2vwIrPcVRLw74UcWb4Y/edit?gid=161138712#gid=161138712";
+const DEFAULT_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1r1oF6e43liRkKVbIP8h-yf_L6K22fdyzu4g816gtAV8/edit?hl=pt-br&gid=1772567492#gid=1772567492";
+const SALES_AUTO_SYNC_MS = 600000;
+const LOCAL_SNAPSHOT_KEY = "ws-consultoria-local-snapshot-v2";
+const LOCAL_MIRROR_COLLECTIONS = ["sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "deletedRefs"];
 const COMMERCIAL_SELLER_KEYS = new Set(["IVAN", "LUISE", "ISIS", "BRUNA", "ADRIELE"]);
 let salesAutoTimer = null;
 
@@ -129,6 +132,7 @@ async function boot() {
   $("#logoutBtn").addEventListener("click", logout);
   $("#themeBtn").addEventListener("click", toggleTheme);
   $("#reminderBtn").addEventListener("click", toggleReminderDrawer);
+  $("#mobileMenuBtn")?.addEventListener("click", () => $(".sidebar")?.classList.toggle("mobile-open"));
   try {
     const session = await request("/api/me");
     state.user = session.user;
@@ -168,12 +172,71 @@ async function logout() {
 }
 
 async function loadAll() {
-  state.data = await request("/api/all");
+  const serverData = ensureClientShape(await request("/api/all"));
+  const restored = await restoreLocalSnapshotIfNeeded(serverData);
+  state.data = restored ? ensureClientShape(await request("/api/all", { silent: true })) : serverData;
   state.settings = state.data.settings;
-  for (const key of ["condos", "visits", "sellers", "sales", "plans", "expansions", "weeklySchedules", "activities", "users", "deletedRefs"]) {
-    if (!Array.isArray(state.data[key])) state.data[key] = [];
-  }
+  saveLocalSnapshot();
   await loadMapLayers();
+}
+
+function ensureClientShape(data) {
+  const shaped = data || {};
+  shaped.settings = { salesSheetUrl: DEFAULT_SALES_SHEET_URL, ...(shaped.settings || {}) };
+  if (!shaped.settings.salesSheetUrl || shaped.settings.salesSheetUrl === OLD_SALES_SHEET_URL) shaped.settings.salesSheetUrl = DEFAULT_SALES_SHEET_URL;
+  for (const key of ["condos", "visits", "sellers", "sales", "plans", "expansions", "weeklySchedules", "activities", "users", "deletedRefs"]) {
+    if (!Array.isArray(shaped[key])) shaped[key] = [];
+  }
+  return shaped;
+}
+
+function readLocalSnapshot() {
+  try {
+    const snapshot = JSON.parse(localStorage.getItem(LOCAL_SNAPSHOT_KEY) || "null");
+    return snapshot?.data ? snapshot : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalSnapshot() {
+  try {
+    if (!state.user || !state.data) return;
+    const data = { settings: { salesSheetUrl: state.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL } };
+    LOCAL_MIRROR_COLLECTIONS.forEach((key) => {
+      data[key] = Array.isArray(state.data[key]) ? state.data[key] : [];
+    });
+    localStorage.setItem(LOCAL_SNAPSHOT_KEY, JSON.stringify({ savedAt: new Date().toISOString(), data }));
+  } catch {
+    // O navegador pode bloquear localStorage em modo privado; nesse caso o servidor continua operando normalmente.
+  }
+}
+
+function localSnapshotShouldRestore(serverData, snapshot) {
+  if (!snapshot?.data) return false;
+  const localSchedules = activeLocalCount(snapshot.data, "weeklySchedules");
+  const serverSchedules = activeLocalCount(serverData, "weeklySchedules");
+  const localOperational = LOCAL_MIRROR_COLLECTIONS.filter((key) => key !== "deletedRefs").reduce((sum, key) => sum + activeLocalCount(snapshot.data, key), 0);
+  const serverOperational = LOCAL_MIRROR_COLLECTIONS.filter((key) => key !== "deletedRefs").reduce((sum, key) => sum + activeLocalCount(serverData, key), 0);
+  return localSchedules > serverSchedules || localOperational >= serverOperational + 5;
+}
+
+function activeLocalCount(data, collection) {
+  const deleted = new Set((data.deletedRefs || []).map((ref) => ref.key).filter(Boolean));
+  return (data[collection] || []).filter((item) => item?.id && !deleted.has(`${collection}:id:${item.id}`)).length;
+}
+
+async function restoreLocalSnapshotIfNeeded(serverData) {
+  const snapshot = readLocalSnapshot();
+  if (!localSnapshotShouldRestore(serverData, snapshot)) return false;
+  try {
+    const result = await request("/api/local-restore", { method: "POST", body: snapshot, silent: true });
+    if (result.restored) console.info(`Backup local restaurado: ${result.restored} registro(s).`);
+    return Boolean(result.restored);
+  } catch (error) {
+    console.warn("Nao foi possivel restaurar o backup local.", error);
+    return false;
+  }
 }
 
 async function loadMapLayers() {
@@ -240,6 +303,7 @@ function render() {
 function goToPage(page) {
   state.page = page;
   state.query = "";
+  $(".sidebar")?.classList.remove("mobile-open");
   renderNav();
   render();
 }
