@@ -33,6 +33,7 @@ const ALLOWED_SALES_SELLERS = new Map([
 const LOCAL_RESTORE_COLLECTIONS = ["sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "deletedRefs"];
 const loginAttempts = new Map();
 let salesImportRunning = false;
+let nodemailerModule = null;
 
 const sessions = new Map();
 
@@ -73,6 +74,14 @@ function defaultStore() {
       primaryColor: "#13251f",
       accentColor: "#c9a227",
       salesSheetUrl: DEFAULT_SALES_SHEET_URL,
+      calendarAutoInvite: "false",
+      smtpHost: "",
+      smtpPort: "587",
+      smtpSecure: "false",
+      smtpUser: "",
+      smtpPassword: "",
+      smtpFromName: "WS Consultoria",
+      smtpFromEmail: "",
       theme: "dark"
     },
     users: [
@@ -271,6 +280,21 @@ function cleanUser(user) {
   return safe;
 }
 
+function cleanSettings(settings) {
+  const safe = { ...settings };
+  safe.smtpPassword = safe.smtpPassword ? "" : "";
+  safe.smtpConfigured = Boolean(settings.smtpHost && settings.smtpUser && settings.smtpPassword);
+  return safe;
+}
+
+function settingsFromBody(current, body) {
+  const next = { ...current, ...body };
+  if (!body.smtpPassword) next.smtpPassword = current.smtpPassword || "";
+  next.calendarAutoInvite = String(parseBoolean(body.calendarAutoInvite, parseBoolean(current.calendarAutoInvite, false)));
+  next.smtpSecure = String(parseBoolean(body.smtpSecure, parseBoolean(current.smtpSecure, false)));
+  return next;
+}
+
 function parseBoolean(value, fallback = true) {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") {
@@ -312,6 +336,14 @@ function ensureShape(db) {
     primaryColor: "#13251f",
     accentColor: "#c9a227",
     salesSheetUrl: DEFAULT_SALES_SHEET_URL,
+    calendarAutoInvite: "false",
+    smtpHost: "",
+    smtpPort: "587",
+    smtpSecure: "false",
+    smtpUser: "",
+    smtpPassword: "",
+    smtpFromName: "WS Consultoria",
+    smtpFromEmail: "",
     theme: "dark",
     ...db.settings
   };
@@ -533,6 +565,148 @@ function addDeletedRef(db, key, collection, item, user) {
   db.deletedRefs = db.deletedRefs.slice(0, 5000);
 }
 
+function getNodemailer() {
+  if (!nodemailerModule) nodemailerModule = require("nodemailer");
+  return nodemailerModule;
+}
+
+function smtpReady(settings) {
+  return Boolean(settings.smtpHost && settings.smtpUser && settings.smtpPassword && (settings.smtpFromEmail || settings.notificationEmail || settings.adminEmail));
+}
+
+function calendarInviteEnabled(settings) {
+  return parseBoolean(settings.calendarAutoInvite, false);
+}
+
+function scheduleSellerIdsServer(item) {
+  return (Array.isArray(item?.sellerIds) && item.sellerIds.length ? item.sellerIds : [item?.sellerId]).map(String).filter(Boolean);
+}
+
+function scheduleSellersServer(db, item) {
+  const names = scheduleSellerIdsServer(item).map((id) => db.sellers.find((seller) => seller.id === id)?.name).filter(Boolean);
+  return names.length ? names : ["Equipe"];
+}
+
+function scheduleSellerEmailsServer(db, item) {
+  return [...new Set(scheduleSellerIdsServer(item)
+    .map((id) => db.sellers.find((seller) => seller.id === id))
+    .map((seller) => seller?.email)
+    .filter(Boolean))];
+}
+
+function scheduleCondoServer(db, item) {
+  return db.condos.find((condo) => condo.id === item.condoId) || {};
+}
+
+function icsLocalDate(date, time) {
+  return `${String(date || new Date().toISOString().slice(0, 10)).replace(/-/g, "")}T${String(time || "09:00").replace(":", "")}00`;
+}
+
+function icsUtcDate(date = new Date()) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+function icsEscape(value) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+}
+
+function buildScheduleIcs(db, item, attendees, settings) {
+  const condo = scheduleCondoServer(db, item);
+  const title = `${condo.name || item.condoName || "Programacao"} - ${scheduleSellersServer(db, item).join(", ")}`;
+  const location = item.address || condo.address || "";
+  const fromEmail = settings.smtpFromEmail || settings.notificationEmail || settings.adminEmail;
+  const fromName = settings.smtpFromName || settings.companyName || "WS Consultoria";
+  const description = [
+    `Consultores: ${scheduleSellersServer(db, item).join(", ")}`,
+    `Status: ${item.status || "Programada"}`,
+    `Atuacao: ${item.accessMode || "-"} | ${item.workArea || "-"}`,
+    item.notes ? `Orientacao: ${item.notes}` : ""
+  ].filter(Boolean).join("\n");
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//WS Consultoria//Programacao//PT-BR",
+    "CALSCALE:GREGORIAN",
+    "METHOD:REQUEST",
+    "BEGIN:VEVENT",
+    `UID:${item.id}@ws-consultoria`,
+    `DTSTAMP:${icsUtcDate(new Date())}`,
+    `DTSTART;TZID=America/Sao_Paulo:${icsLocalDate(item.date, item.startTime || "09:00")}`,
+    `DTEND;TZID=America/Sao_Paulo:${icsLocalDate(item.date, item.endTime || "10:00")}`,
+    `SUMMARY:${icsEscape(title)}`,
+    `LOCATION:${icsEscape(location)}`,
+    `DESCRIPTION:${icsEscape(description)}`,
+    `ORGANIZER;CN=${icsEscape(fromName)}:MAILTO:${fromEmail}`,
+    ...attendees.map((email) => `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:MAILTO:${email}`),
+    "STATUS:CONFIRMED",
+    "SEQUENCE:0",
+    "END:VEVENT",
+    "END:VCALENDAR"
+  ].join("\r\n");
+}
+
+function buildScheduleInviteText(db, item) {
+  const condo = scheduleCondoServer(db, item);
+  return [
+    "Programacao de equipe",
+    "",
+    `Condominio: ${condo.name || item.condoName || "-"}`,
+    `Endereco: ${item.address || condo.address || "-"}`,
+    `Data: ${item.date || "-"}`,
+    `Horario: ${item.startTime || "-"} as ${item.endTime || "-"}`,
+    `Consultores: ${scheduleSellersServer(db, item).join(", ")}`,
+    `Atuacao: ${item.accessMode || "-"} | ${item.workArea || "-"}`,
+    "",
+    item.notes || ""
+  ].join("\n");
+}
+
+async function sendScheduleCalendarInvite(db, item, user, forced = false) {
+  if (!forced && !calendarInviteEnabled(db.settings)) return { sent: false, skipped: "disabled" };
+  const emails = scheduleSellerEmailsServer(db, item);
+  if (!emails.length) {
+    item.calendarInviteStatus = "Pendente: nenhum email de consultor cadastrado";
+    item.calendarInviteUpdatedAt = new Date().toISOString();
+    return { sent: false, skipped: "missing-seller-email" };
+  }
+  if (!smtpReady(db.settings)) {
+    item.calendarInviteStatus = "Pendente: configure SMTP em Empresa";
+    item.calendarInviteUpdatedAt = new Date().toISOString();
+    return { sent: false, skipped: "missing-smtp" };
+  }
+  try {
+    const nodemailer = getNodemailer();
+    const fromEmail = db.settings.smtpFromEmail || db.settings.notificationEmail || db.settings.adminEmail;
+    const fromName = db.settings.smtpFromName || db.settings.companyName || "WS Consultoria";
+    const transporter = nodemailer.createTransport({
+      host: db.settings.smtpHost,
+      port: Number(db.settings.smtpPort || 587),
+      secure: parseBoolean(db.settings.smtpSecure, false),
+      auth: { user: db.settings.smtpUser, pass: db.settings.smtpPassword }
+    });
+    const condo = scheduleCondoServer(db, item);
+    const subject = `Programacao: ${condo.name || item.condoName || "Condominio"} - ${item.date || ""}`;
+    const ics = buildScheduleIcs(db, item, emails, db.settings);
+    await transporter.sendMail({
+      from: `"${fromName}" <${fromEmail}>`,
+      to: emails.join(","),
+      subject,
+      text: buildScheduleInviteText(db, item),
+      icalEvent: { filename: "programacao.ics", method: "REQUEST", content: ics }
+    });
+    item.calendarInviteSentAt = new Date().toISOString();
+    item.calendarInviteUpdatedAt = item.calendarInviteSentAt;
+    item.calendarInviteStatus = `Enviado para ${emails.join(", ")}`;
+    addActivity(db, user || { name: "Sistema" }, "Enviou Google Agenda", `${condo.name || item.condoName || item.id}: ${emails.join(", ")}`);
+    return { sent: true, emails };
+  } catch (error) {
+    item.calendarInviteStatus = `Erro ao enviar agenda: ${error.message}`;
+    item.calendarInviteUpdatedAt = new Date().toISOString();
+    addActivity(db, user || { name: "Sistema" }, "Falhou Google Agenda", item.calendarInviteStatus);
+    return { sent: false, error: error.message };
+  }
+}
+
 function localDeletedKeys(db, incoming) {
   return new Set([...(db.deletedRefs || []), ...((incoming && incoming.deletedRefs) || [])].map((ref) => ref.key).filter(Boolean));
 }
@@ -683,7 +857,7 @@ async function api(req, res) {
       ...securityHeaders("application/json"),
       "Set-Cookie": `ws_session=${encodeURIComponent(sid)}; ${cookieOptions(req)}`
     });
-    return res.end(JSON.stringify({ user: cleanUser(user), settings: db.settings }));
+    return res.end(JSON.stringify({ user: cleanUser(user), settings: cleanSettings(db.settings) }));
   }
 
   if (url.pathname === "/api/logout" && method === "POST") {
@@ -700,14 +874,14 @@ async function api(req, res) {
     const user = requireAuth(req, res);
     if (!user) return;
     const db = readStore();
-    return send(res, 200, { user: cleanUser(user), settings: db.settings });
+    return send(res, 200, { user: cleanUser(user), settings: cleanSettings(db.settings) });
   }
 
   if (url.pathname === "/api/all") {
     const user = requireAuth(req, res);
     if (!user) return;
     const db = ensureShape(readStore());
-    return send(res, 200, { ...db, users: db.users.map(cleanUser) });
+    return send(res, 200, { ...db, settings: cleanSettings(db.settings), users: db.users.map(cleanUser) });
   }
 
   if (url.pathname === "/api/local-restore" && method === "POST") {
@@ -744,6 +918,18 @@ async function api(req, res) {
     return send(res, 200, { imported });
   }
 
+  const calendarInviteMatch = url.pathname.match(/^\/api\/weeklySchedules\/([^/]+)\/calendar-invite$/);
+  if (calendarInviteMatch && method === "POST") {
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const db = ensureShape(readStore());
+    const item = db.weeklySchedules.find((schedule) => schedule.id === calendarInviteMatch[1]);
+    if (!item) return send(res, 404, { error: "Programacao nao encontrada." });
+    const result = await sendScheduleCalendarInvite(db, item, user, true);
+    writeStore(db);
+    return send(res, result.error ? 400 : 200, result);
+  }
+
   const name = collectionName(url.pathname);
   if (!name) return send(res, 404, { error: "Rota nao encontrada." });
   const user = requireAuth(req, res);
@@ -751,6 +937,7 @@ async function api(req, res) {
   const db = ensureShape(readStore());
 
   if (method === "GET") {
+    if (name === "settings") return send(res, 200, cleanSettings(db.settings));
     return send(res, 200, name === "users" ? db.users.map(cleanUser) : db[name]);
   }
 
@@ -759,10 +946,10 @@ async function api(req, res) {
   if (method === "POST") {
     const body = await getBody(req);
     if (name === "settings") {
-      db.settings = { ...db.settings, ...body };
+      db.settings = settingsFromBody(db.settings, body);
       addActivity(db, user, "Atualizou configurações", "Dados da empresa e notificações");
       writeStore(db);
-      return send(res, 200, db.settings);
+      return send(res, 200, cleanSettings(db.settings));
     }
     const item = { ...body, id: uid(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     if (name === "users") {
@@ -774,6 +961,10 @@ async function api(req, res) {
     db[name].unshift(item);
     addActivity(db, user, `Criou ${name}`, item.name || item.title || item.code || item.id);
     writeStore(db);
+    if (name === "weeklySchedules") {
+      await sendScheduleCalendarInvite(db, item, user, false);
+      writeStore(db);
+    }
     return send(res, 201, name === "users" ? cleanUser(item) : item);
   }
 

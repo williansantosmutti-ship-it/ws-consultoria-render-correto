@@ -1632,6 +1632,25 @@ body[data-theme="dark"] .history-card.danger span { background: #3b1614; color: 
 .share-email textarea[readonly] {
   background: var(--surface);
 }
+.settings-subtitle {
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+  border: 1px solid rgba(201, 162, 39, .26);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(201, 162, 39, .11), rgba(255,255,255,.72));
+}
+.settings-subtitle strong { color: var(--ink); font-size: 15px; }
+.settings-subtitle span { color: var(--muted); font-size: 12px; font-weight: 800; }
+.schedule-invite-status {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: rgba(201, 162, 39, .12);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
 .icon { width: 40px; padding: 0; }
 
 @media (max-width: 900px) {

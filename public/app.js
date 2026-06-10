@@ -1370,6 +1370,7 @@ function bindPageEvents() {
   });
   document.querySelectorAll("[data-calendar]").forEach((button) => button.addEventListener("click", () => openCalendar(button.dataset.calendar)));
   document.querySelectorAll("[data-email]").forEach((button) => button.addEventListener("click", () => openEmail(button.dataset.email)));
+  document.querySelectorAll("[data-send-calendar-invite]").forEach((button) => button.addEventListener("click", () => sendCalendarInvite(button.dataset.sendCalendarInvite)));
   bindReminderEvents();
   document.querySelectorAll("[data-search]").forEach((input) => input.addEventListener("input", () => {
     state.query = input.value;
@@ -1753,9 +1754,11 @@ function scheduleCard(item) {
     </div>
     <span>${escapeHtml(item.workArea || item.accessMode || "Atuação")}</span>
     <p>${escapeHtml(info.title)}</p>
+    ${item.calendarInviteStatus ? `<p class="schedule-invite-status">${escapeHtml(item.calendarInviteStatus)}</p>` : ""}
     <div class="row-actions">
       <button class="secondary" data-edit="weeklySchedules:${item.id}">Editar</button>
       <button class="secondary" data-email="weeklySchedules:${item.id}">Enviar equipe</button>
+      <button class="secondary" data-send-calendar-invite="${item.id}">Agenda Google</button>
       <button class="secondary" data-map="${escapeHtml(item.address || condo?.address || "")}">Mapa</button>
       <button class="danger" data-delete="weeklySchedules:${item.id}">Excluir</button>
     </div>
@@ -2779,6 +2782,20 @@ async function toggleUser(id, active) {
   await request(`/api/users/${id}`, { method: "PUT", body: { active: active === "true" } });
   await loadAll();
   render();
+}
+
+async function sendCalendarInvite(id) {
+  if (!id) return;
+  try {
+    const result = await request(`/api/weeklySchedules/${id}/calendar-invite`, { method: "POST" });
+    await loadAll();
+    render();
+    alert(result.sent ? `Convite enviado para ${result.emails.join(", ")}.` : "Convite nao enviado. Confira o status na programacao.");
+  } catch (error) {
+    await loadAll();
+    render();
+    alert(error.message || "Nao foi possivel enviar para o Google Agenda.");
+  }
 }
 
 function dismissAlert(key) {
@@ -4007,6 +4024,37 @@ function escapeHtml(value) {
 
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function settings() {
+  return `
+    <section class="card">
+      <div class="section-head"><h3>Personalizacao e notificacoes</h3></div>
+      <form id="settingsForm" class="form-grid">
+        ${input("companyName", "Nome da empresa", state.settings.companyName || "WS CONSULTORIA")}
+        ${input("adminEmail", "Email do administrador", state.settings.adminEmail || "")}
+        ${input("notificationEmail", "Email para confirmacoes", state.settings.notificationEmail || "")}
+        ${input("primaryColor", "Cor principal premium", state.settings.primaryColor || "#13251f", "color")}
+        ${input("accentColor", "Cor de destaque", state.settings.accentColor || "#c9a227", "color")}
+        ${select("theme", "Tema inicial", ["dark", "light"], state.settings.theme || "dark")}
+        ${input("logoUrl", "URL ou caminho da logo", state.settings.logoUrl || "", "text", "full")}
+        ${input("salesSheetUrl", "Link da planilha de vendas", state.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL, "url", "full")}
+        <div class="settings-subtitle full">
+          <strong>Google Agenda da equipe</strong>
+          <span>Envia convite de agenda automaticamente para os emails dos consultores quando uma rota da programacao e criada.</span>
+        </div>
+        ${select("calendarAutoInvite", "Disparo automatico", [{ id: "true", name: "Ativado" }, { id: "false", name: "Desativado" }], String(state.settings.calendarAutoInvite || "false"))}
+        ${input("smtpFromName", "Nome do remetente", state.settings.smtpFromName || "WS Consultoria")}
+        ${input("smtpFromEmail", "Email remetente", state.settings.smtpFromEmail || state.settings.notificationEmail || "", "email")}
+        ${input("smtpHost", "Servidor SMTP", state.settings.smtpHost || "", "text")}
+        ${input("smtpPort", "Porta SMTP", state.settings.smtpPort || "587", "number")}
+        ${select("smtpSecure", "Seguranca", [{ id: "false", name: "STARTTLS / porta 587" }, { id: "true", name: "SSL / porta 465" }], String(state.settings.smtpSecure || "false"))}
+        ${input("smtpUser", "Usuario SMTP", state.settings.smtpUser || "", "text")}
+        ${input("smtpPassword", state.settings.smtpConfigured ? "Senha/App password (deixe vazio para manter)" : "Senha/App password", "", "password")}
+        <label class="full">Observacoes de integracao<textarea name="integrationNotes">${escapeHtml(state.settings.integrationNotes || "Para Google Agenda automatico, configure SMTP. Gmail/Google Workspace normalmente exige senha de app.")}</textarea></label>
+        <button class="primary" type="submit">Salvar configuracoes</button>
+      </form>
+    </section>`;
 }
 
 boot();
