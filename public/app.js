@@ -3852,9 +3852,8 @@ function includesAny(values, needle) {
 function upcomingEvents(all = false) {
   const today = todayISO();
   const visitEvents = state.data.visits.map((visit) => eventFromRef(`visits:${visit.id}`)).filter(Boolean);
-  const scheduleEvents = state.data.weeklySchedules.map((item) => eventFromRef(`weeklySchedules:${item.id}`)).filter(Boolean);
   const expansionEvents = state.data.expansions.map((item) => eventFromRef(`expansions:${item.id}`)).filter(Boolean).filter((event) => event.date);
-  const rows = [...visitEvents, ...scheduleEvents, ...expansionEvents].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const rows = [...visitEvents, ...expansionEvents].sort((a, b) => String(a.date).localeCompare(String(b.date)));
   return all ? rows : rows.filter((event) => event.date && String(event.date).slice(0, 10) >= today && event.status !== "Concluida" && event.status !== "Concluido");
 }
 
