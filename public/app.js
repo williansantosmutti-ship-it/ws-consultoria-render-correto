@@ -46,18 +46,18 @@ const menu = [
   { id: "dashboard", label: "Painel", page: "dashboard" },
   {
     id: "supervision",
-    label: "SupervisÃ£o Comercial",
+    label: "Supervisão Comercial",
     items: [
       ["agenda", "Agenda"],
-      ["weeklySchedules", "ProgramaÃ§Ã£o"],
+      ["weeklySchedules", "Programação"],
       ["coverageMap", "Mapa"],
-      ["visits", "Relacionamento com CondomÃ­nios"],
-      ["expansions", "ExpansÃ£o"]
+      ["visits", "Relacionamento com Condomínios"],
+      ["expansions", "Expansão"]
     ]
   },
   {
     id: "commercial",
-    label: "GestÃ£o Comercial",
+    label: "Gestão Comercial",
     items: [
       ["sales", "Vendas"],
       ["sellers", "Vendedores"],
@@ -66,16 +66,16 @@ const menu = [
   },
   {
     id: "condominiums",
-    label: "GestÃ£o de CondomÃ­nios",
-    items: [["condos", "CondomÃ­nios"]]
+    label: "Gestão de Condomínios",
+    items: [["condos", "Condomínios"]]
   },
   {
     id: "admin",
-    label: "AdministraÃ§Ã£o",
+    label: "Administração",
     items: [
-      ["reports", "RelatÃ³rios"],
+      ["reports", "Relatórios"],
       ["backup", "Backup"],
-      ["logs", "HistÃ³rico"],
+      ["logs", "Histórico"],
       ["users", "Acessos"],
       ["settings", "Empresa"]
     ]
@@ -107,7 +107,7 @@ async function request(url, options = {}) {
   });
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = json.error || "NÃ£o foi possÃ­vel concluir.";
+    const message = json.error || "Não foi possível concluir.";
     if (response.status === 401 && !options.silent && !options.body?.silent) {
       showSessionExpired(message);
     }
@@ -117,7 +117,7 @@ async function request(url, options = {}) {
 }
 
 let sessionExpiredShown = false;
-function showSessionExpired(message = "SessÃ£o expirada. Entre novamente.") {
+function showSessionExpired(message = "Sessão expirada. Entre novamente.") {
   if (sessionExpiredShown) return;
   sessionExpiredShown = true;
   alert(message);
@@ -271,7 +271,7 @@ function renderNav() {
     const open = state.navOpen.has(group.id);
     const active = group.items.some(([id]) => id === state.page);
     return `<div class="nav-group ${open ? "open" : ""} ${active ? "active-group" : ""}">
-      <button class="nav-group-btn" data-nav-group="${group.id}"><span>${open ? "â–¼" : "â–¶"}</span>${group.label}</button>
+      <button class="nav-group-btn" data-nav-group="${group.id}"><span>${open ? "▼" : "▶"}</span>${group.label}</button>
       <div class="nav-submenu">
         ${group.items.map(([id, label]) => `<button class="nav-btn nav-sub ${state.page === id ? "active" : ""}" data-page="${id}">${label}</button>`).join("")}
       </div>
@@ -360,7 +360,7 @@ function renderReminderDrawer() {
   drawer.classList.toggle("hidden", !state.remindersOpen);
   drawer.innerHTML = `<div class="reminder-drawer-head">
     <strong>Lembretes</strong>
-    <button class="icon close-reminders" data-close-reminders>Ã—</button>
+    <button class="icon close-reminders" data-close-reminders>×</button>
   </div>
   ${soon.length ? soon.map(reminderItem).join("") : `<div class="empty compact">Nenhum lembrete pendente.</div>`}`;
   bindReminderEvents();
@@ -385,7 +385,7 @@ function reminderActionButton(event) {
 function renderAlerts() {
   const soon = upcomingEvents().filter((event) => !state.dismissedAlerts.has(alertKey(event))).slice(0, 4);
   $("#toastArea").innerHTML = soon.filter((event) => state.activeToasts.has(alertKey(event))).map((event) => `<div class="toast">
-    <button class="toast-close" data-close-toast="${alertKey(event)}">Ã—</button>
+    <button class="toast-close" data-close-toast="${alertKey(event)}">×</button>
     <strong>${fmtDateTime(event.date)}</strong>
     <span>${escapeHtml(event.title)}</span>
     <small>${escapeHtml(event.note || "")}</small>
@@ -422,12 +422,12 @@ function dashboard() {
   return `
     <section class="card dashboard-filter">
       <div class="section-head">
-        <h3>VisÃ£o do painel</h3>
+        <h3>Visão do painel</h3>
         <div class="segmented">
           ${segment("resumo", "Resumo", filter)}
           ${segment("vendas", "Vendas", filter)}
           ${segment("visitas", "Visitas", filter)}
-          ${segment("expansao", "ExpansÃ£o", filter)}
+          ${segment("expansao", "Expansão", filter)}
           ${segment("vistoria", "Vistoria", filter)}
         </div>
       </div>
@@ -438,7 +438,7 @@ function dashboard() {
 function dashboardContent(filter) {
   if (filter === "vendas") return salesDashboard();
   if (filter === "visitas") return visitsDashboard("Visitas", (visit) => true);
-  if (filter === "expansao") return expansionDashboard("Protocolos de implantaÃ§Ã£o e ampliaÃ§Ã£o", (item) => item.type !== "Vistoria");
+  if (filter === "expansao") return expansionDashboard("Protocolos de implantação e ampliação", (item) => item.type !== "Vistoria");
   if (filter === "vistoria") return expansionDashboard("Vistorias", (item) => item.type === "Vistoria");
   return summaryDashboard();
 }
@@ -453,27 +453,27 @@ function summaryDashboard() {
   return `
     <section class="dashboard-hero">
       <div>
-        <span>OperaÃ§Ã£o WS Consultoria</span>
-        <h3>Controle comercial, visitas e equipe em um sÃ³ painel</h3>
-        <p>${nextEvent ? `PrÃ³xima atividade: ${escapeHtml(nextEvent.title)} em ${fmtDateTime(nextEvent.date)}.` : "Nenhuma atividade futura pendente no momento."}</p>
+        <span>Operação WS Consultoria</span>
+        <h3>Controle comercial, visitas e equipe em um só painel</h3>
+        <p>${nextEvent ? `Próxima atividade: ${escapeHtml(nextEvent.title)} em ${fmtDateTime(nextEvent.date)}.` : "Nenhuma atividade futura pendente no momento."}</p>
       </div>
       <div class="hero-actions">
         <button class="primary" data-new="weeklySchedules">Programar equipe</button>
-        <button class="secondary" data-new="sales">LanÃ§ar venda</button>
+        <button class="secondary" data-new="sales">Lançar venda</button>
         <button class="secondary" data-new="visits">Agendar visita</button>
       </div>
     </section>
     <div class="grid cols-4">
-      ${metric("CondomÃ­nios", state.data.condos.length)}
+      ${metric("Condomínios", state.data.condos.length)}
       ${metric("Visitas abertas", openVisits)}
-      ${metric("Vendas do mÃªs", salesMonth.length)}
+      ${metric("Vendas do mês", salesMonth.length)}
       ${metric("Protocolos em aberto", openExpansions)}
     </div>
     ${smartRecommendations()}
     <div class="grid cols-2">
       <section class="card">
-        <div class="section-head"><h3>Hoje</h3><button class="primary" data-new="weeklySchedules">Nova programaÃ§Ã£o</button></div>
-        ${table(["HorÃ¡rio", "Atividade", "Status"], todayEvents.slice(0, 8).map((event) => [fmtTime(event.date), event.title, status(event.status)]))}
+        <div class="section-head"><h3>Hoje</h3><button class="primary" data-new="weeklySchedules">Nova programação</button></div>
+        ${table(["Horário", "Atividade", "Status"], todayEvents.slice(0, 8).map((event) => [fmtTime(event.date), event.title, status(event.status)]))}
       </section>
       <section class="card">
         <div class="section-head"><h3>Ranking de vendedores</h3><button class="primary" data-new="sales">Nova venda</button></div>
@@ -481,7 +481,7 @@ function summaryDashboard() {
       </section>
     </div>
     <section class="card">
-      <div class="section-head"><h3>PrÃ³ximas atividades</h3><button class="secondary" data-page-jump="weeklySchedules">Ver programaÃ§Ã£o</button></div>
+      <div class="section-head"><h3>Próximas atividades</h3><button class="secondary" data-page-jump="weeklySchedules">Ver programação</button></div>
       ${table(["Data", "Atividade", "Local"], upcomingEvents().slice(0, 10).map((event) => [fmtDateTime(event.date), event.title, event.location || "-"]))}
     </section>`;
 }
@@ -490,18 +490,18 @@ function smartRecommendations() {
   const latest = latestVisitByCondo();
   const stale60 = state.data.condos.filter((condo) => daysSince(latest.get(condo.id)?.date) > 60).length;
   const nextToday = upcomingEvents().filter((event) => String(event.date || "").slice(0, 10) === todayISO()).length;
-  const expansionRisk = state.data.expansions.filter((item) => ["Em anÃ¡lise", "Aguardando aprovaÃ§Ã£o", "Em vistoria", "Em inspeÃ§Ã£o"].includes(item.status)).length;
+  const expansionRisk = state.data.expansions.filter((item) => ["Em análise", "Aguardando aprovação", "Em vistoria", "Em inspeção"].includes(item.status)).length;
   const sellerRows = sellerRanking();
   const leader = sellerRows[0];
   const suggestions = [
-    stale60 ? { title: `${stale60} condomÃ­nios sem visita hÃ¡ mais de 60 dias`, note: "Priorize retorno em locais com potencial comercial alto.", action: "Ver histÃ³rico", page: "weeklySchedules" } : null,
-    expansionRisk ? { title: `${expansionRisk} demandas de expansÃ£o pedem acompanhamento`, note: "Acompanhe aprovaÃ§Ãµes e vistorias para evitar perda de prazo.", action: "Ver expansÃ£o", page: "expansions" } : null,
-    leader ? { title: `${leader.name} lidera o mÃªs com ${leader.count} venda(s)`, note: "Use o padrÃ£o do melhor desempenho para orientar a equipe.", action: "Ver vendedores", page: "sellers" } : null,
-    nextToday ? { title: `${nextToday} atividade(s) ainda hoje`, note: "Confira programaÃ§Ã£o e relacionamento antes de sair para campo.", action: "Ver agenda", page: "agenda" } : null
+    stale60 ? { title: `${stale60} condomínios sem visita há mais de 60 dias`, note: "Priorize retorno em locais com potencial comercial alto.", action: "Ver histórico", page: "weeklySchedules" } : null,
+    expansionRisk ? { title: `${expansionRisk} demandas de expansão pedem acompanhamento`, note: "Acompanhe aprovações e vistorias para evitar perda de prazo.", action: "Ver expansão", page: "expansions" } : null,
+    leader ? { title: `${leader.name} lidera o mês com ${leader.count} venda(s)`, note: "Use o padrão do melhor desempenho para orientar a equipe.", action: "Ver vendedores", page: "sellers" } : null,
+    nextToday ? { title: `${nextToday} atividade(s) ainda hoje`, note: "Confira programação e relacionamento antes de sair para campo.", action: "Ver agenda", page: "agenda" } : null
   ].filter(Boolean).slice(0, 4);
   if (!suggestions.length) return "";
   return `<section class="card insight-card">
-    <div class="section-head"><h3>SugestÃµes inteligentes</h3><small>Prioridades geradas pelo sistema</small></div>
+    <div class="section-head"><h3>Sugestões inteligentes</h3><small>Prioridades geradas pelo sistema</small></div>
     <div class="insight-grid">
       ${suggestions.map((item) => `<article class="insight-item">
         <strong>${escapeHtml(item.title)}</strong>
@@ -517,9 +517,9 @@ function salesDashboard() {
   const sales = visibleSalesRows().filter((sale) => String(sale.date || "").startsWith(month));
   return `
     <div class="grid cols-3">
-      ${metric("Vendas no mÃªs", sales.length)}
+      ${metric("Vendas no mês", sales.length)}
       ${metric("Receita apurada", money(sales.reduce((sum, sale) => sum + Number(sale.value || 0), 0)))}
-      ${metric("Ticket mÃ©dio", money(sales.length ? sales.reduce((sum, sale) => sum + Number(sale.value || 0), 0) / sales.length : 0))}
+      ${metric("Ticket médio", money(sales.length ? sales.reduce((sum, sale) => sum + Number(sale.value || 0), 0) / sales.length : 0))}
     </div>
     <section class="card">${barChart("Vendas por vendedor", sellerRanking().map((row) => ({ label: row.name, value: row.count })))}</section>
     <section class="card">${table(["Data", "Vendedor", "Cliente", "Valor"], sales.slice(0, 12).map((sale) => [fmtDate(sale.date), saleSellerName(sale) || "-", sale.customer || "-", money(sale.value)]))}</section>`;
@@ -534,7 +534,7 @@ function visitsDashboard(title, predicate) {
       ${metric("Concluidas", rows.filter((item) => item.status === "Concluida").length)}
     </div>
     <section class="card">${barChart(`${title} por status`, counts(rows, "status"))}</section>
-    <section class="card">${table(["Data", "CondomÃ­nio", "Status", "Obs"], rows.slice(0, 12).map((visit) => [fmtDateTime(visit.date), findById("condos", visit.condoId)?.name || "-", status(visit.status), visit.notes || "-"]))}</section>`;
+    <section class="card">${table(["Data", "Condomínio", "Status", "Obs"], rows.slice(0, 12).map((visit) => [fmtDateTime(visit.date), findById("condos", visit.condoId)?.name || "-", status(visit.status), visit.notes || "-"]))}</section>`;
 }
 
 function expansionDashboard(title, predicate) {
@@ -546,7 +546,7 @@ function expansionDashboard(title, predicate) {
       ${metric("Em projeto", rows.filter((item) => item.status === "Projeto").length)}
     </div>
     <section class="card">${barChart(title, counts(rows, "status"))}</section>
-    <section class="card">${table(["CondomÃ­nio", "Protocolo IXC", "Status", "Obs"], rows.slice(0, 12).map((item) => [item.condoName, item.protocol, status(item.status), item.notes || "-"]))}</section>`;
+    <section class="card">${table(["Condomínio", "Protocolo IXC", "Status", "Obs"], rows.slice(0, 12).map((item) => [item.condoName, item.protocol, status(item.status), item.notes || "-"]))}</section>`;
 }
 
 function agenda() {
@@ -555,9 +555,9 @@ function agenda() {
       <div class="section-head">
         <h3>${state.calendarDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}</h3>
         <div class="toolbar">
-          <button class="secondary" data-cal-prev>MÃªs anterior</button>
+          <button class="secondary" data-cal-prev>Mês anterior</button>
           <button class="secondary" data-cal-today>Hoje</button>
-          <button class="secondary" data-cal-next>PrÃ³ximo mÃªs</button>
+          <button class="secondary" data-cal-next>Próximo mês</button>
           <button class="primary" data-new="visits">Nova visita</button>
         </div>
       </div>
@@ -594,9 +594,9 @@ function condos() {
       filterText("neighborhood", "Bairro"),
       filterSelect("status", "Status", ["Ativo", "Pendente", "Inativo"]),
       filterText("administradora", "Administradora"),
-      filterText("sindico", "SÃ­ndico")
+      filterText("sindico", "Síndico")
     ])}
-    ${listView("Cadastro mestre de condomÃ­nios", "condos", ["Nome", "Cidade/Bairro", "EndereÃ§o", "Ãšltima ida", "PrÃ³ximo retorno", "SÃ­ndico / Administradora", "Unidades", "Status", "AÃ§Ãµes"], rows.map((item) => {
+    ${listView("Cadastro mestre de condomínios", "condos", ["Nome", "Cidade/Bairro", "Endereço", "Última ida", "Próximo retorno", "Síndico / Administradora", "Unidades", "Status", "Ações"], rows.map((item) => {
     const visitInfo = condoVisitSummary(item.id);
     return [
     item.name,
@@ -620,7 +620,7 @@ function condoVisitSummary(condoId) {
       date: `${item.date}T${item.startTime || "12:00"}:00`,
       sellers: scheduleSellers(item),
       followUpDays: Number(item.followUpDays || 30),
-      source: "ProgramaÃ§Ã£o",
+      source: "Programação",
       status: item.status || "Programada"
     });
   });
@@ -636,7 +636,7 @@ function condoVisitSummary(condoId) {
   });
   records.sort((a, b) => String(b.date).localeCompare(String(a.date)));
   const last = records[0];
-  if (!last) return { lastHtml: "Sem histÃ³rico", nextHtml: "Programar primeira ida" };
+  if (!last) return { lastHtml: "Sem histórico", nextHtml: "Programar primeira ida" };
   const next = new Date(last.date);
   next.setDate(next.getDate() + Number(last.followUpDays || 30));
   const overdue = next < new Date();
@@ -658,29 +658,29 @@ function weeklySchedules() {
   const weekRows = state.data.weeklySchedules.filter((item) => item.date >= today && item.date <= weekEndIso);
   return `
     <div class="grid cols-3">
-      ${metric("ProgramaÃ§Ãµes da semana", weekRows.length)}
-      ${metric("CondomÃ­nios na rota", new Set(weekRows.map((item) => item.condoId).filter(Boolean)).size)}
+      ${metric("Programações da semana", weekRows.length)}
+      ${metric("Condomínios na rota", new Set(weekRows.map((item) => item.condoId).filter(Boolean)).size)}
       ${metric("Equipes externas", weekRows.filter((item) => item.accessMode === "Ficar externo").length)}
     </div>
     ${filterPanel("weeklySchedules", [
-      filterInput("from", "InÃ­cio", "date"),
+      filterInput("from", "Início", "date"),
       filterInput("to", "Fim", "date"),
       filterSelect("seller", "Consultor", options("sellers").slice(1)),
-      filterText("region", "RegiÃ£o"),
-      filterSelect("condo", "CondomÃ­nio", options("condos").slice(1)),
-      filterSelect("status", "Status", ["Programada", "Confirmada", "Em andamento", "ConcluÃ­da", "Reagendar", "Cancelada"])
+      filterText("region", "Região"),
+      filterSelect("condo", "Condomínio", options("condos").slice(1)),
+      filterSelect("status", "Status", ["Programada", "Confirmada", "Em andamento", "Concluída", "Reagendar", "Cancelada"])
     ])}
     ${scheduleImportPanel()}
     <section class="card">
       <div class="section-head">
-        <h3>ProgramaÃ§Ã£o</h3>
+        <h3>Programação</h3>
         <div class="toolbar">
           <div class="segmented">
             ${scheduleSegment("week", "Semana operacional")}
-            ${scheduleSegment("history", "HistÃ³rico de visitas")}
+            ${scheduleSegment("history", "Histórico de visitas")}
           </div>
-          ${state.scheduleView === "week" ? `<button class="secondary" data-select-visible-schedules>Selecionar visÃ­veis</button><button class="danger soft" data-delete-selected-schedules ${state.selectedSchedules.size ? "" : "disabled"}>Excluir selecionadas (${state.selectedSchedules.size})</button>` : ""}
-          <button class="secondary" data-copy-schedule>Copiar programaÃ§Ã£o</button>
+          ${state.scheduleView === "week" ? `<button class="secondary" data-select-visible-schedules>Selecionar visíveis</button><button class="danger soft" data-delete-selected-schedules ${state.selectedSchedules.size ? "" : "disabled"}>Excluir selecionadas (${state.selectedSchedules.size})</button>` : ""}
+          <button class="secondary" data-copy-schedule>Copiar programação</button>
           <button class="secondary" data-download-schedule>Baixar PDF</button>
           <button class="primary" data-new="weeklySchedules">Adicionar rota</button>
         </div>
@@ -697,21 +697,21 @@ function scheduleImportPanel() {
   return `<section class="card schedule-import-card">
     <div class="section-head">
       <div>
-        <h3>Importar programaÃ§Ã£o por PDF</h3>
-        <p class="hint">Selecione o arquivo da programaÃ§Ã£o semanal. O sistema identifica dia, consultor e condomÃ­nio usando os cadastros jÃ¡ salvos. Semanas anteriores permanecem salvas; escolha a segunda-feira correta antes de lanÃ§ar.</p>
+        <h3>Importar programação por PDF</h3>
+        <p class="hint">Selecione o arquivo da programação semanal. O sistema identifica dia, consultor e condomínio usando os cadastros já salvos. Semanas anteriores permanecem salvas; escolha a segunda-feira correta antes de lançar.</p>
       </div>
       <div class="toolbar">
         <label>Segunda-feira da semana<input type="date" data-import-week-start value="${escapeHtml(weekStart)}"></label>
         <label class="file-button">Ler PDF<input type="file" data-import-schedule-pdf accept="application/pdf,.pdf"></label>
         ${rows.length ? `<button class="secondary" data-clear-schedule-import>Limpar</button>` : ""}
-        ${ready.length ? `<button class="primary" data-commit-schedule-import>LanÃ§ar ${ready.length} rota(s)</button>` : ""}
+        ${ready.length ? `<button class="primary" data-commit-schedule-import>Lançar ${ready.length} rota(s)</button>` : ""}
       </div>
     </div>
     ${state.scheduleImport.message ? `<p class="import-message">${escapeHtml(state.scheduleImport.message)}</p>` : ""}
     ${rows.length ? `<div class="import-summary">
       <span><strong>${rows.length}</strong>linha(s) lida(s)</span>
-      <span><strong>${ready.length}</strong>pronta(s) para lanÃ§ar</span>
-      <span><strong>${pending}</strong>precisa(m) revisÃ£o</span>
+      <span><strong>${ready.length}</strong>pronta(s) para lançar</span>
+      <span><strong>${pending}</strong>precisa(m) revisão</span>
       <span><strong>${escapeHtml(state.scheduleImport.fileName || "-")}</strong>arquivo</span>
     </div>
     ${scheduleImportSpreadsheet(rows)}
@@ -739,9 +739,9 @@ function scheduleImportCard(row) {
   return `<article class="import-route ${row.ready ? "ready" : "review"}">
     <div>
       <strong>${escapeHtml(row.consultantText || "-")}</strong>
-      <span>${escapeHtml(row.startTime)} Ã s ${escapeHtml(row.endTime)}</span>
+      <span>${escapeHtml(row.startTime)} às ${escapeHtml(row.endTime)}</span>
     </div>
-    <p>${escapeHtml(row.condoText || "Sem condomÃ­nio")}</p>
+    <p>${escapeHtml(row.condoText || "Sem condomínio")}</p>
     <small>${escapeHtml(row.condoName || row.issue || "Revisar cadastro")}</small>
     ${row.condoId ? "" : scheduleImportCondoFix(row)}
   </article>`;
@@ -749,9 +749,9 @@ function scheduleImportCard(row) {
 
 function scheduleImportCondoFix(row) {
   const suggestions = condoImportSuggestions(row.condoText);
-  return `<label class="import-fix">Corrigir condomÃ­nio
+  return `<label class="import-fix">Corrigir condomínio
     <select data-import-condo="${row.importIndex}">
-      <option value="">Selecionar condomÃ­nio cadastrado</option>
+      <option value="">Selecionar condomínio cadastrado</option>
       ${suggestions.map((condo) => `<option value="${condo.id}">${escapeHtml(condo.name)}${condo.neighborhood ? ` - ${escapeHtml(condo.neighborhood)}` : ""}</option>`).join("")}
     </select>
   </label>`;
@@ -790,7 +790,7 @@ function scheduleSegment(id, label) {
 }
 
 function coverageMap() {
-  const condoPoints = state.data.condos.map((condo) => ({ label: condo.name, address: condo.address, lat: parseCoords(condo.coordinates)?.lat, lng: parseCoords(condo.coordinates)?.lng, source: "CondomÃ­nio cadastrado", kind: "CondomÃ­nio" })).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng));
+  const condoPoints = state.data.condos.map((condo) => ({ label: condo.name, address: condo.address, lat: parseCoords(condo.coordinates)?.lat, lng: parseCoords(condo.coordinates)?.lng, source: "Condomínio cadastrado", kind: "Condomínio" })).filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng));
   const preloadedPoints = mapState.preloaded.flatMap((file) => (file.points || []).map((point) => ({ ...point, source: file.name, kind: point.type || "KML/KMZ" })));
   const importedPoints = mapState.files.flatMap((file) => file.points.map((point) => ({ ...point, source: file.name, kind: point.type || "Importado" })));
   const allPoints = [...condoPoints, ...preloadedPoints, ...importedPoints];
@@ -799,7 +799,7 @@ function coverageMap() {
   const mapUrl = `https://www.google.com/maps?q=${encodeURIComponent(query)}&output=embed`;
   return `
     <div class="grid cols-3">
-      ${metric("CondomÃ­nios com coordenada", condoPoints.length)}
+      ${metric("Condomínios com coordenada", condoPoints.length)}
       ${metric("Arquivos KML/KMZ carregados", mapState.preloaded.length + mapState.files.length)}
       ${metric("Locais marcados", allPoints.length)}
     </div>
@@ -816,20 +816,20 @@ function coverageMap() {
         <iframe title="Mapa Google" src="${escapeHtml(mapUrl)}" loading="lazy"></iframe>
         ${googleMapOverlay(visiblePoints)}
       </div>
-      <p class="hint">Os arquivos KML/KMZ enviados jÃ¡ foram carregados. Os sÃ­mbolos aparecem sobre o Google Maps para facilitar a identificaÃ§Ã£o visual; clique em um local para centralizar o mapa.</p>
+      <p class="hint">Os arquivos KML/KMZ enviados já foram carregados. Os símbolos aparecem sobre o Google Maps para facilitar a identificação visual; clique em um local para centralizar o mapa.</p>
       <div class="map-points-panel">
         <div class="section-head">
           <h3>Locais marcados que atendemos</h3>
           <div class="toolbar">
-            <input data-map-search placeholder="Pesquisar condomÃ­nio ou ponto..." value="${escapeHtml(mapState.search)}">
+            <input data-map-search placeholder="Pesquisar condomínio ou ponto..." value="${escapeHtml(mapState.search)}">
             <button class="secondary" data-map-search-apply>Pesquisar</button>
-            <button class="secondary" data-clear-map-files>Limpar importaÃ§Ãµes extras</button>
+            <button class="secondary" data-clear-map-files>Limpar importações extras</button>
           </div>
         </div>
         <div class="map-point-list">
           ${visiblePoints.slice(0, 600).map((point) => `<button data-map-query="${escapeHtml(point.address || `${point.lat},${point.lng}`)}">${escapeHtml(point.label)}<small>${escapeHtml(point.kind)} | ${escapeHtml(point.source || "")}</small></button>`).join("") || `<div class="empty">Nenhum local marcado encontrado.</div>`}
         </div>
-        ${visiblePoints.length > 600 ? `<p class="hint">Mostrando os primeiros 600 locais para manter a tela leve. Use a pesquisa para encontrar um condomÃ­nio especÃ­fico.</p>` : ""}
+        ${visiblePoints.length > 600 ? `<p class="hint">Mostrando os primeiros 600 locais para manter a tela leve. Use a pesquisa para encontrar um condomínio específico.</p>` : ""}
       </div>
     </section>`;
 }
@@ -839,18 +839,18 @@ function visits() {
   return `
     ${relationshipDashboard(rows)}
     ${filterPanel("visits", [
-      filterInput("from", "InÃ­cio", "date"),
+      filterInput("from", "Início", "date"),
       filterInput("to", "Fim", "date"),
-      filterSelect("seller", "ResponsÃ¡vel", options("sellers").slice(1)),
-      filterSelect("condo", "CondomÃ­nio", options("condos").slice(1)),
+      filterSelect("seller", "Responsável", options("sellers").slice(1)),
+      filterSelect("condo", "Condomínio", options("condos").slice(1)),
       filterSelect("status", "Status", relationshipStatuses()),
-      filterSelect("partnership", "Parceria", ["Alto", "MÃ©dio", "Baixo"])
+      filterSelect("partnership", "Parceria", ["Alto", "Médio", "Baixo"])
     ])}
-    ${listView("Relacionamento com CondomÃ­nios", "visits", ["Data", "CondomÃ­nio", "ResponsÃ¡vel", "Cupom", "Relacionamento", "PrÃ³xima visita", "Status", "AÃ§Ãµes"], rows.map((visit) => [
+    ${listView("Relacionamento com Condomínios", "visits", ["Data", "Condomínio", "Responsável", "Cupom", "Relacionamento", "Próxima visita", "Status", "Ações"], rows.map((visit) => [
     fmtDateTime(visit.date),
     findById("condos", visit.condoId)?.name || "-",
     findById("sellers", visit.sellerId)?.name || visit.responsible || "-",
-    visit.couponDelivered || visit.couponCode ? "Sim" : "NÃ£o",
+    visit.couponDelivered || visit.couponCode ? "Sim" : "Não",
     `${visit.relationship || "-"}<small>Potencial: ${escapeHtml(visit.commercialPotential || "-")}</small>`,
     fmtDate(visit.nextVisit),
     status(visit.status || "Agendada"),
@@ -863,20 +863,20 @@ function expansions() {
   return `
     ${expansionMetrics(rows)}
     ${filterPanel("expansions", [
-      filterSelect("type", "Tipo da demanda", ["Vistoria", "InspeÃ§Ã£o", "ImplantaÃ§Ã£o"]),
+      filterSelect("type", "Tipo da demanda", ["Vistoria", "Inspeção", "Implantação"]),
       filterSelect("status", "Status", expansionStatuses()),
-      filterSelect("seller", "ResponsÃ¡vel", options("sellers").slice(1)),
+      filterSelect("seller", "Responsável", options("sellers").slice(1)),
       filterText("city", "Cidade"),
       filterText("neighborhood", "Bairro"),
-      filterSelect("condo", "CondomÃ­nio", options("condos").slice(1))
+      filterSelect("condo", "Condomínio", options("condos").slice(1))
     ])}
-    ${listView("ExpansÃ£o da operaÃ§Ã£o", "expansions", ["CondomÃ­nio", "EndereÃ§o", "ResponsÃ¡vel", "Tipo", "Prevista", "Status", "AÃ§Ãµes"], rows.map((item) => [
+    ${listView("Expansão da operação", "expansions", ["Condomínio", "Endereço", "Responsável", "Tipo", "Prevista", "Status", "Ações"], rows.map((item) => [
     item.condoName,
     item.address || "-",
     findById("sellers", item.sellerId)?.name || item.responsible || "-",
     item.type || "-",
     fmtDate(item.expectedDate || item.date),
-    status(item.status || "Em anÃ¡lise"),
+    status(item.status || "Em análise"),
     actions("expansions", item.id, true)
   ]))}`;
 }
@@ -890,8 +890,8 @@ function sellers() {
       ${sellers.map((seller) => sellerPanel(seller, monthSales)).join("")}
     </div>
     <section class="card">
-      <div class="section-head"><h3>Ranking automÃ¡tico</h3></div>
-      ${table(["PosiÃ§Ã£o", "Vendedor", "Vendas", "Receita", "ConversÃ£o"], rankings.map((row, index) => [
+      <div class="section-head"><h3>Ranking automático</h3></div>
+      ${table(["Posição", "Vendedor", "Vendas", "Receita", "Conversão"], rankings.map((row, index) => [
         index + 1,
         row.name,
         row.count,
@@ -899,7 +899,7 @@ function sellers() {
         `${row.conversion}%`
       ]))}
     </section>
-    ${listView("Equipe de vendedores", "sellers", ["Nome", "Contato", "Meta mensal", "Status", "Vendas mÃªs", "AÃ§Ãµes"], sellers.map((seller) => [
+    ${listView("Equipe de vendedores", "sellers", ["Nome", "Contato", "Meta mensal", "Status", "Vendas mês", "Ações"], sellers.map((seller) => [
     seller.name,
     [seller.phone, seller.email].filter(Boolean).join(" | ") || "-",
     seller.goal || 0,
@@ -914,14 +914,14 @@ function sales() {
   return `
     ${salesMetrics(rows)}
     ${filterPanel("sales", [
-      filterInput("from", "InÃ­cio", "date"),
+      filterInput("from", "Início", "date"),
       filterInput("to", "Fim", "date"),
       filterSelect("seller", "Vendedor", commercialSellerOptions()),
-      filterSelect("condo", "CondomÃ­nio", options("condos").slice(1)),
+      filterSelect("condo", "Condomínio", options("condos").slice(1)),
       filterSelect("plan", "Plano", options("plans").slice(1)),
       filterSelect("saleType", "Tipo", ["Venda nova", "Repetidor de sinal", "Upgrade", "Downgrade", "Cancelamento"]),
       filterSelect("status", "Status", ["Confirmada", "Pendente", "Cancelada"]),
-      filterInput("minValue", "Valor mÃ­nimo", "number")
+      filterInput("minValue", "Valor mínimo", "number")
     ])}
     <section class="card">
       <div class="section-head">
@@ -930,12 +930,12 @@ function sales() {
       </div>
       <form id="salesSheetForm" class="form-grid">
         ${input("salesSheetUrl", "Link da planilha online", state.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL, "url", "full")}
-        <p class="hint full">AtualizaÃ§Ã£o automÃ¡tica ativa a cada 1 minuto. O sistema importa somente IVAN, LUISE, ISIS, BRUNA e ADRIELE, classificando venda nova, repetidor de sinal, upgrade, downgrade e cancelamento.</p>
-        <label class="full">Ou cole aqui os dados copiados da planilha<textarea name="csvText" placeholder="Cole as colunas com cabeÃ§alho: vendedor, cliente, plano, valor, data..."></textarea></label>
+        <p class="hint full">Atualização automática ativa a cada 1 minuto. O sistema importa somente IVAN, LUISE, ISIS, BRUNA e ADRIELE, classificando venda nova, repetidor de sinal, upgrade, downgrade e cancelamento.</p>
+        <label class="full">Ou cole aqui os dados copiados da planilha<textarea name="csvText" placeholder="Cole as colunas com cabeçalho: vendedor, cliente, plano, valor, data..."></textarea></label>
         <button class="secondary" type="button" data-import-sales-text>Importar dados colados</button>
       </form>
     </section>
-    ${listView("Vendas e apuraÃ§Ã£o", "sales", ["Data", "Vendedor", "Tipo", "Plano", "Cliente", "CondomÃ­nio", "Valor", "Status", "AÃ§Ãµes"], rows.map((sale) => [
+    ${listView("Vendas e apuração", "sales", ["Data", "Vendedor", "Tipo", "Plano", "Cliente", "Condomínio", "Valor", "Status", "Ações"], rows.map((sale) => [
       fmtDate(sale.date),
       saleSellerName(sale) || "-",
       saleTypeLabel(sale),
@@ -954,9 +954,9 @@ function plans() {
     ${filterPanel("plans", [
       filterSelect("status", "Ativo/Inativo", ["Ativo", "Promocional", "Inativo"]),
       filterText("speed", "Velocidade"),
-      filterInput("maxValue", "Valor atÃ©", "number")
+      filterInput("maxValue", "Valor até", "number")
     ])}
-    ${listView("Planos comercializados", "plans", ["Cidade", "ServiÃ§o", "Plano", "PreÃ§o", "Status", "Anexo/tabela", "AÃ§Ãµes"], rows.map((plan) => [
+    ${listView("Planos comercializados", "plans", ["Cidade", "Serviço", "Plano", "Preço", "Status", "Anexo/tabela", "Ações"], rows.map((plan) => [
     plan.city || "-",
     plan.serviceType || "-",
     `${escapeHtml(plan.name || "-")}<small>${escapeHtml(plan.speed || "")}</small>`,
@@ -974,8 +974,8 @@ function reports() {
     <section class="card report-builder">
       <div class="section-head report-builder-head">
         <div>
-          <h3>Montar relatÃ³rio</h3>
-          <p class="hint">Escolha a Ã¡rea e marque somente as informaÃ§Ãµes que devem sair no documento.</p>
+          <h3>Montar relatório</h3>
+          <p class="hint">Escolha a área e marque somente as informações que devem sair no documento.</p>
         </div>
         <div class="toolbar">
           <button class="secondary" data-copy-report>Copiar resumo</button>
@@ -989,8 +989,8 @@ function reports() {
       </div>
       <div class="report-options-box">
         <div>
-          <strong>InformaÃ§Ãµes do relatÃ³rio</strong>
-          <small>O PDF/Excel serÃ¡ gerado com base nesta seleÃ§Ã£o.</small>
+          <strong>Informações do relatório</strong>
+          <small>O PDF/Excel será gerado com base nesta seleção.</small>
         </div>
         <div class="report-option-grid">
           ${reportOptionList(filter).map((option) => reportOptionCard(option, selected.has(option.key))).join("")}
@@ -1005,27 +1005,27 @@ function backup() {
   const content = JSON.stringify(state.data, null, 2);
   const sizeKb = Math.max(1, Math.round(new Blob([content]).size / 1024));
   const collections = [
-    ["CondomÃ­nios", state.data.condos.length],
+    ["Condomínios", state.data.condos.length],
     ["Relacionamentos", state.data.visits.length],
-    ["ProgramaÃ§Ãµes", state.data.weeklySchedules.length],
+    ["Programações", state.data.weeklySchedules.length],
     ["Vendas", state.data.sales.length],
-    ["ExpansÃµes", state.data.expansions.length],
+    ["Expansões", state.data.expansions.length],
     ["Planos", state.data.plans.length],
-    ["UsuÃ¡rios", state.data.users.length],
-    ["HistÃ³rico", state.data.activities.length]
+    ["Usuários", state.data.users.length],
+    ["Histórico", state.data.activities.length]
   ];
   return `
     <div class="grid cols-4">
       ${metric("Tamanho estimado", `${sizeKb} KB`)}
-      ${metric("Bases incluÃ­das", collections.length)}
+      ${metric("Bases incluídas", collections.length)}
       ${metric("Registros totais", collections.reduce((sum, row) => sum + Number(row[1] || 0), 0))}
-      ${metric("Ãšltima geraÃ§Ã£o", fmtDateTime(new Date().toISOString()))}
+      ${metric("Última geração", fmtDateTime(new Date().toISOString()))}
     </div>
     <section class="card backup-panel">
       <div class="section-head">
         <div>
           <h3>Backup completo do sistema</h3>
-          <p class="hint">Exporta todos os cadastros, vendas, programaÃ§Ãµes, relacionamento, usuÃ¡rios, configuraÃ§Ãµes e histÃ³rico.</p>
+          <p class="hint">Exporta todos os cadastros, vendas, programações, relacionamento, usuários, configurações e histórico.</p>
         </div>
         <div class="toolbar">
           <button class="secondary" data-copy-backup>Copiar backup</button>
@@ -1035,12 +1035,12 @@ function backup() {
       <div class="backup-summary">
         ${collections.map(([label, value]) => `<span><strong>${value}</strong>${escapeHtml(label)}</span>`).join("")}
       </div>
-      <p class="backup-note">Guarde o arquivo em local seguro. Ele contÃ©m dados operacionais e acessos do sistema.</p>
+      <p class="backup-note">Guarde o arquivo em local seguro. Ele contém dados operacionais e acessos do sistema.</p>
     </section>`;
 }
 
 function users() {
-  return listView("Acessos e categorias", "users", ["Nome", "Email", "Categoria", "Status", "AÃ§Ãµes"], filtered("users").map((user) => [
+  return listView("Acessos e categorias", "users", ["Nome", "Email", "Categoria", "Status", "Ações"], filtered("users").map((user) => [
     user.name,
     user.email,
     user.role,
@@ -1053,13 +1053,13 @@ function logs() {
   return `
     <section class="card">
       <div class="section-head">
-        <h3>HistÃ³rico operacional</h3>
+        <h3>Histórico operacional</h3>
         <div class="toolbar">
           <input data-search placeholder="Buscar..." value="${escapeHtml(state.query)}">
-          <button class="secondary" data-copy-logs>Copiar histÃ³rico</button>
+          <button class="secondary" data-copy-logs>Copiar histórico</button>
         </div>
       </div>
-      ${table(["Data", "UsuÃ¡rio", "AÃ§Ã£o", "Detalhe"], filtered("activities").map((item) => [
+      ${table(["Data", "Usuário", "Ação", "Detalhe"], filtered("activities").map((item) => [
         fmtDateTime(item.date),
         item.user || "-",
         item.action || "-",
@@ -1129,17 +1129,17 @@ function relationshipDashboard(rows) {
     ${metric("Sem visita > 60 dias", noVisit60)}
     ${metric("Parceria forte", strong)}
     ${metric("Parceria fraca", weak)}
-    ${metric("PrioritÃ¡rios", priority)}
+    ${metric("Prioritários", priority)}
   </div>`;
 }
 
 function expansionMetrics(rows) {
   return `<div class="grid cols-5">
-    ${metric("Vistorias pendentes", rows.filter((item) => item.type === "Vistoria" && !["ConcluÃ­do", "Reprovado"].includes(item.status)).length)}
-    ${metric("InspeÃ§Ãµes pendentes", rows.filter((item) => item.type === "InspeÃ§Ã£o" && !["ConcluÃ­do", "Reprovado"].includes(item.status)).length)}
-    ${metric("ImplantaÃ§Ãµes em andamento", rows.filter((item) => item.type === "ImplantaÃ§Ã£o" && item.status === "Em implantaÃ§Ã£o").length)}
-    ${metric("ImplantaÃ§Ãµes concluÃ­das", rows.filter((item) => item.type === "ImplantaÃ§Ã£o" && item.status === "ConcluÃ­do").length)}
-    ${metric("Novos em prospecÃ§Ã£o", rows.filter((item) => item.status === "Em anÃ¡lise").length)}
+    ${metric("Vistorias pendentes", rows.filter((item) => item.type === "Vistoria" && !["Concluído", "Reprovado"].includes(item.status)).length)}
+    ${metric("Inspeções pendentes", rows.filter((item) => item.type === "Inspeção" && !["Concluído", "Reprovado"].includes(item.status)).length)}
+    ${metric("Implantações em andamento", rows.filter((item) => item.type === "Implantação" && item.status === "Em implantação").length)}
+    ${metric("Implantações concluídas", rows.filter((item) => item.type === "Implantação" && item.status === "Concluído").length)}
+    ${metric("Novos em prospecção", rows.filter((item) => item.status === "Em análise").length)}
   </div>`;
 }
 
@@ -1196,9 +1196,9 @@ function salesMetrics(rows) {
   return `<div class="grid cols-5">
     ${metric("Vendas do dia", confirmed.filter((sale) => String(sale.date || "").slice(0, 10) === today).length)}
     ${metric("Semana", confirmed.filter((sale) => String(sale.date || "").slice(0, 10) >= weekIso).length)}
-    ${metric("MÃªs", confirmed.filter((sale) => String(sale.date || "").startsWith(month)).length)}
+    ${metric("Mês", confirmed.filter((sale) => String(sale.date || "").startsWith(month)).length)}
     ${metric("Meta", goal)}
-    ${metric("ConversÃ£o", `${confirmed.length}/${rows.length || 0}`)}
+    ${metric("Conversão", `${confirmed.length}/${rows.length || 0}`)}
   </div>
   <div class="grid cols-5">
     ${metric("Venda nova", rows.filter((sale) => saleTypeLabel(sale) === "Venda nova").length)}
@@ -1220,8 +1220,8 @@ function sellerPanel(seller, monthSales) {
       <span>${escapeHtml(seller.status || "Ativo")}</span>
     </div>
     <strong>${rows.length}</strong>
-    <small>Meta: ${seller.goal || 0} | ConversÃ£o: ${conversion}% | Ticket mÃ©dio: ${money(rows.length ? value / rows.length : 0)}</small>
-    <small>Ãšltima venda: ${last ? fmtDate(last.date) : "-"}</small>
+    <small>Meta: ${seller.goal || 0} | Conversão: ${conversion}% | Ticket médio: ${money(rows.length ? value / rows.length : 0)}</small>
+    <small>Última venda: ${last ? fmtDate(last.date) : "-"}</small>
   </section>`;
 }
 
@@ -1438,64 +1438,64 @@ function formFields(collection, item = {}) {
   const planOptions = options("plans", item.planId);
   const fields = {
     condos: [
-      input("name", "Nome do condomÃ­nio", item.name, "text", "full"),
+      input("name", "Nome do condomínio", item.name, "text", "full"),
       input("city", "Cidade", item.city),
       input("neighborhood", "Bairro", item.neighborhood),
-      input("address", "EndereÃ§o completo", item.address, "text", "full"),
-      input("contactName", "SÃ­ndico", item.contactName),
+      input("address", "Endereço completo", item.address, "text", "full"),
+      input("contactName", "Síndico", item.contactName),
       input("managerCompany", "Administradora", item.managerCompany),
       input("capacity", "Quantidade de unidades", item.capacity, "number"),
       input("phone", "Telefone", item.phone),
       input("email", "Email", item.email, "email"),
       select("status", "Status", ["Ativo", "Pendente", "Inativo"], item.status),
-      area("notes", "ObservaÃ§Ãµes", item.notes, "full")
+      area("notes", "Observações", item.notes, "full")
     ],
     weeklySchedules: [
-      select("condoId", "CondomÃ­nio", condoOptions, item.condoId, "full"),
-      input("address", "EndereÃ§o", item.address || findById("condos", item.condoId)?.address || "", "text", "full"),
+      select("condoId", "Condomínio", condoOptions, item.condoId, "full"),
+      input("address", "Endereço", item.address || findById("condos", item.condoId)?.address || "", "text", "full"),
       input("date", "Data", item.date || todayISO(), "date"),
-      input("startTime", "HorÃ¡rio inicial", item.startTime || "09:00", "time"),
-      input("endTime", "HorÃ¡rio final", item.endTime || "12:00", "time"),
-      multiSelect("sellerIds", "ResponsÃ¡veis", sellerOptions.slice(1), item.sellerIds || (item.sellerId ? [item.sellerId] : []), "full"),
-      input("workArea", "Ãrea / setor de atuaÃ§Ã£o", item.workArea || "", "text", "full"),
-      select("accessMode", "AtuaÃ§Ã£o no condomÃ­nio", ["Pode entrar", "Ficar externo", "Aguardando autorizaÃ§Ã£o"], item.accessMode || "Pode entrar"),
-      select("status", "Status", ["Programada", "Confirmada", "Em andamento", "ConcluÃ­da", "Reagendar", "Cancelada"], item.status || "Programada"),
+      input("startTime", "Horário inicial", item.startTime || "09:00", "time"),
+      input("endTime", "Horário final", item.endTime || "12:00", "time"),
+      multiSelect("sellerIds", "Responsáveis", sellerOptions.slice(1), item.sellerIds || (item.sellerId ? [item.sellerId] : []), "full"),
+      input("workArea", "Área / setor de atuação", item.workArea || "", "text", "full"),
+      select("accessMode", "Atuação no condomínio", ["Pode entrar", "Ficar externo", "Aguardando autorização"], item.accessMode || "Pode entrar"),
+      select("status", "Status", ["Programada", "Confirmada", "Em andamento", "Concluída", "Reagendar", "Cancelada"], item.status || "Programada"),
       input("followUpDays", "Voltar em quantos dias", item.followUpDays || 30, "number"),
       `<div class="schedule-helper full" data-schedule-helper>${scheduleHelperHtml(item.condoId, item.date)}</div>`,
-      area("notes", "OrientaÃ§Ãµes para a equipe", item.notes, "full")
+      area("notes", "Orientações para a equipe", item.notes, "full")
     ],
     visits: [
-      select("condoId", "CondomÃ­nio", condoOptions, item.condoId, "full"),
-      input("syndic", "SÃ­ndico", item.syndic || findById("condos", item.condoId)?.contactName || ""),
+      select("condoId", "Condomínio", condoOptions, item.condoId, "full"),
+      input("syndic", "Síndico", item.syndic || findById("condos", item.condoId)?.contactName || ""),
       input("managerCompany", "Administradora", item.managerCompany || findById("condos", item.condoId)?.managerCompany || ""),
       input("date", "Data e hora", item.date ? item.date.slice(0, 16) : "", "datetime-local"),
-      select("sellerId", "ResponsÃ¡vel", sellerOptions, item.sellerId),
-      select("couponDelivered", "Cupom entregue", ["Sim", "NÃ£o"], item.couponDelivered || (item.couponCode ? "Sim" : "NÃ£o")),
-      select("entryAllowed", "Permite entrada", ["Sim", "NÃ£o"], item.entryAllowed || "Sim"),
-      select("partnershipInterest", "Interesse na parceria", ["Alto", "MÃ©dio", "Baixo"], item.partnershipInterest),
+      select("sellerId", "Responsável", sellerOptions, item.sellerId),
+      select("couponDelivered", "Cupom entregue", ["Sim", "Não"], item.couponDelivered || (item.couponCode ? "Sim" : "Não")),
+      select("entryAllowed", "Permite entrada", ["Sim", "Não"], item.entryAllowed || "Sim"),
+      select("partnershipInterest", "Interesse na parceria", ["Alto", "Médio", "Baixo"], item.partnershipInterest),
       select("relationship", "Relacionamento", ["Excelente", "Bom", "Regular", "Ruim"], item.relationship),
-      select("commercialPotential", "Potencial comercial", ["Alto", "MÃ©dio", "Baixo"], item.commercialPotential),
+      select("commercialPotential", "Potencial comercial", ["Alto", "Médio", "Baixo"], item.commercialPotential),
       select("status", "Status", relationshipStatuses(), item.status || "Pendente"),
-      input("nextVisit", "PrÃ³xima visita", item.nextVisit ? String(item.nextVisit).slice(0, 10) : "", "date"),
+      input("nextVisit", "Próxima visita", item.nextVisit ? String(item.nextVisit).slice(0, 10) : "", "date"),
       input("purpose", "Objetivo", item.purpose || "Relacionamento"),
-      input("couponCode", "CÃ³digo do cupom", item.couponCode),
-      area("notes", "ObservaÃ§Ãµes", item.notes, "full"),
-      area("result", "Feedback / prÃ³ximos passos", item.result, "full")
+      input("couponCode", "Código do cupom", item.couponCode),
+      area("notes", "Observações", item.notes, "full"),
+      area("result", "Feedback / próximos passos", item.result, "full")
     ],
     expansions: [
-      select("condoId", "CondomÃ­nio cadastrado", condoOptions, item.condoId, "full"),
-      input("condoName", "Nome de condomÃ­nio", item.condoName, "text", "full"),
-      input("address", "EndereÃ§o completo", item.address, "text", "full"),
+      select("condoId", "Condomínio cadastrado", condoOptions, item.condoId, "full"),
+      input("condoName", "Nome de condomínio", item.condoName, "text", "full"),
+      input("address", "Endereço completo", item.address, "text", "full"),
       input("city", "Cidade", item.city),
       input("neighborhood", "Bairro", item.neighborhood),
-      select("sellerId", "ResponsÃ¡vel", sellerOptions, item.sellerId),
+      select("sellerId", "Responsável", sellerOptions, item.sellerId),
       input("protocol", "Protocolo no IXC", item.protocol),
-      select("type", "Tipo da demanda", ["Vistoria", "InspeÃ§Ã£o", "ImplantaÃ§Ã£o"], item.type || "Vistoria"),
+      select("type", "Tipo da demanda", ["Vistoria", "Inspeção", "Implantação"], item.type || "Vistoria"),
       input("expectedDate", "Data prevista", item.expectedDate ? String(item.expectedDate).slice(0, 10) : "", "date"),
       input("doneDate", "Data realizada", item.doneDate ? String(item.doneDate).slice(0, 10) : "", "date"),
       input("date", "Agenda / prazo", item.date ? item.date.slice(0, 16) : "", "datetime-local"),
-      select("status", "Status", expansionStatuses(), item.status || "Em anÃ¡lise"),
-      area("notes", "ObservaÃ§Ãµes", item.notes, "full")
+      select("status", "Status", expansionStatuses(), item.status || "Em análise"),
+      area("notes", "Observações", item.notes, "full")
     ],
     sellers: [
       input("name", "Nome", item.name, "text", "full"),
@@ -1509,18 +1509,18 @@ function formFields(collection, item = {}) {
       select("sellerId", "Vendedor", sellerOptions, item.sellerId),
       select("planId", "Plano", planOptions, item.planId),
       input("customer", "Cliente", item.customer),
-      input("condoName", "CondomÃ­nio", item.condoName),
+      input("condoName", "Condomínio", item.condoName),
       input("value", "Valor", item.value, "number"),
       select("status", "Status", ["Confirmada", "Pendente", "Cancelada"], item.status),
-      area("notes", "ObservaÃ§Ãµes", item.notes, "full")
+      area("notes", "Observações", item.notes, "full")
     ],
     plans: [
       input("city", "Cidade", item.city),
-      select("serviceType", "Tipo de serviÃ§o", ["Internet fibra", "Internet condomÃ­nio", "Telefonia", "TV", "Combo", "Outro"], item.serviceType),
+      select("serviceType", "Tipo de serviço", ["Internet fibra", "Internet condomínio", "Telefonia", "TV", "Combo", "Outro"], item.serviceType),
       input("name", "Nome do plano", item.name, "text", "full"),
       input("speed", "Velocidade", item.speed),
-      input("price", "PreÃ§o mensal", item.price, "number"),
-      input("installation", "InstalaÃ§Ã£o", item.installation, "number"),
+      input("price", "Preço mensal", item.price, "number"),
+      input("installation", "Instalação", item.installation, "number"),
       input("sheetUrl", "Anexo/link da tabela", item.sheetUrl, "url", "full"),
       select("status", "Status", ["Ativo", "Promocional", "Inativo"], item.status),
       area("details", "Detalhes / tabela colada", item.details, "full")
@@ -1531,7 +1531,7 @@ function formFields(collection, item = {}) {
       input("password", item.id ? "Nova senha (opcional)" : "Senha", "", "password"),
       select("role", "Perfil", ["Administrador", "Supervisor", "Coordenador", "Consultor", "Visitante"], item.role),
       select("active", "Status", [{ id: true, name: "Ativo" }, { id: false, name: "Inativo" }], item.active !== false),
-      area("permissions", "PermissÃµes por mÃ³dulo (separe por vÃ­rgula)", Array.isArray(item.permissions) ? item.permissions.join(", ") : item.permissions, "full")
+      area("permissions", "Permissões por módulo (separe por vírgula)", Array.isArray(item.permissions) ? item.permissions.join(", ") : item.permissions, "full")
     ]
   };
   return fields[collection] || [];
@@ -1584,11 +1584,11 @@ function openForm(collection, item = {}) {
       modal.remove();
       await loadAll();
       render();
-      if (collection === "weeklySchedules" && scheduleSellerEmails(saved).length && confirm("Abrir envio da programaÃ§Ã£o da semana para os consultores?")) {
+      if (collection === "weeklySchedules" && scheduleSellerEmails(saved).length && confirm("Abrir envio da programação da semana para os consultores?")) {
         openWeeklyScheduleEmail(`weeklySchedules:${saved.id}`);
       }
     } catch (error) {
-      message.textContent = error.message || "NÃ£o foi possÃ­vel salvar. Tente novamente.";
+      message.textContent = error.message || "Não foi possível salvar. Tente novamente.";
       submitButton.disabled = false;
       submitButton.textContent = originalLabel;
     }
@@ -1620,7 +1620,7 @@ function multiSelect(name, label, values, selected = [], klass = "") {
     const text = typeof value === "object" ? value.name : value;
     return `<option value="${escapeHtml(id)}" ${selectedSet.has(String(id)) ? "selected" : ""}>${escapeHtml(text)}</option>`;
   }).join("");
-  return `<label class="${klass}">${label}<select name="${name}[]" multiple size="${Math.min(6, Math.max(3, values.length))}">${opts}</select><small class="field-hint">Segure Ctrl para selecionar mais de um responsÃ¡vel.</small></label>`;
+  return `<label class="${klass}">${label}<select name="${name}[]" multiple size="${Math.min(6, Math.max(3, values.length))}">${opts}</select><small class="field-hint">Segure Ctrl para selecionar mais de um responsável.</small></label>`;
 }
 
 function options(collection) {
@@ -1644,7 +1644,7 @@ function hydrateScheduleForm(modal) {
 }
 
 function scheduleHelperHtml(condoId, date = todayISO()) {
-  if (!condoId) return "Selecione um condomÃ­nio para ver histÃ³rico de visita e prazo de retorno.";
+  if (!condoId) return "Selecione um condomínio para ver histórico de visita e prazo de retorno.";
   const info = condoScheduleInfo(condoId, date);
   return `
     <strong>${escapeHtml(info.title)}</strong>
@@ -1658,7 +1658,7 @@ function condoScheduleInfo(condoId, date = todayISO()) {
   if (!last) {
     return {
       title: "Sem visita registrada",
-      detail: `${condo?.name || "CondomÃ­nio"} deve entrar como prioridade de primeira passagem.`
+      detail: `${condo?.name || "Condomínio"} deve entrar como prioridade de primeira passagem.`
     };
   }
   const base = new Date(date || todayISO());
@@ -1669,8 +1669,8 @@ function condoScheduleInfo(condoId, date = todayISO()) {
   next.setDate(next.getDate() + followUpDays);
   const overdue = next < base;
   return {
-    title: `${days} dia(s) sem passar neste condomÃ­nio`,
-    detail: overdue ? `Retorno recomendado: agora. Ãšltima passagem em ${fmtDate(last.date)}.` : `PrÃ³ximo retorno sugerido: ${fmtDate(next.toISOString())}. Ãšltima passagem em ${fmtDate(last.date)}.`
+    title: `${days} dia(s) sem passar neste condomínio`,
+    detail: overdue ? `Retorno recomendado: agora. Última passagem em ${fmtDate(last.date)}.` : `Próximo retorno sugerido: ${fmtDate(next.toISOString())}. Última passagem em ${fmtDate(last.date)}.`
   };
 }
 
@@ -1730,10 +1730,10 @@ function scheduleCard(item) {
   return `<article class="schedule-card">
     <label class="schedule-select"><input type="checkbox" data-schedule-select="${item.id}" ${checked ? "checked" : ""}><span>Selecionar</span></label>
     <div>
-      <strong>${escapeHtml(condo?.name || item.condoName || "CondomÃ­nio")}</strong>
-      <small>${item.startTime || "-"} Ã s ${item.endTime || "-"} | ${escapeHtml(scheduleSellers(item) || "Equipe")}</small>
+      <strong>${escapeHtml(condo?.name || item.condoName || "Condomínio")}</strong>
+      <small>${item.startTime || "-"} às ${item.endTime || "-"} | ${escapeHtml(scheduleSellers(item) || "Equipe")}</small>
     </div>
-    <span>${escapeHtml(item.workArea || item.accessMode || "AtuaÃ§Ã£o")}</span>
+    <span>${escapeHtml(item.workArea || item.accessMode || "Atuação")}</span>
     <p>${escapeHtml(info.title)}</p>
     ${item.calendarInviteStatus ? `<p class="schedule-invite-status">${escapeHtml(item.calendarInviteStatus)}</p>` : ""}
     <div class="row-actions">
@@ -1759,18 +1759,18 @@ function scheduleHistoryView() {
     .slice(0, 8);
   return `
     <div class="history-toolbar">
-      <input data-search placeholder="Buscar condomÃ­nio, endereÃ§o ou responsÃ¡vel..." value="${escapeHtml(state.query)}">
-      <p class="hint">Veja a Ãºltima aÃ§Ã£o por condomÃ­nio, retorno recomendado, Ãºltima venda e locais com baixa movimentaÃ§Ã£o comercial.</p>
+      <input data-search placeholder="Buscar condomínio, endereço ou responsável..." value="${escapeHtml(state.query)}">
+      <p class="hint">Veja a última ação por condomínio, retorno recomendado, última venda e locais com baixa movimentação comercial.</p>
     </div>
     <div class="history-kpis">
       ${historyKpi("Retorno vencido", allRows.filter((row) => row.overdue).length, "danger")}
-      ${historyKpi("Sem aÃ§Ã£o +30 dias", allRows.filter((row) => row.daysWithoutAction > 30).length, "warn")}
-      ${historyKpi("Sem aÃ§Ã£o +60 dias", allRows.filter((row) => row.daysWithoutAction > 60).length, "danger")}
+      ${historyKpi("Sem ação +30 dias", allRows.filter((row) => row.daysWithoutAction > 30).length, "warn")}
+      ${historyKpi("Sem ação +60 dias", allRows.filter((row) => row.daysWithoutAction > 60).length, "danger")}
       ${historyKpi("Sem venda +60 dias", allRows.filter((row) => row.daysWithoutSale > 60).length, "warn")}
     </div>
     ${historyReminderPanel(reminders)}
     ${historyPriorityPanel(lowActionRows)}
-    ${table(["CondomÃ­nio / endereÃ§o", "Ãšltima aÃ§Ã£o", "Ãšltima venda", "Lembrete", "Movimento comercial", "AÃ§Ãµes"], rows.map((row) => [
+    ${table(["Condomínio / endereço", "Última ação", "Última venda", "Lembrete", "Movimento comercial", "Ações"], rows.map((row) => [
       `${escapeHtml(row.condoName)}<small>${escapeHtml(row.address || "")}</small>`,
       historyLastActionCell(row),
       historyLastSaleCell(row),
@@ -1788,7 +1788,7 @@ function historyKpi(label, value, tone = "") {
 function historyReminderPanel(rows) {
   if (!rows.length) return "";
   return `<section class="history-panel">
-    <div class="section-head"><h3>Lembretes de retorno</h3><span class="hint">CondomÃ­nios vencidos ou prÃ³ximos de voltar</span></div>
+    <div class="section-head"><h3>Lembretes de retorno</h3><span class="hint">Condomínios vencidos ou próximos de voltar</span></div>
     <div class="history-card-grid">
       ${rows.map(historyReminderCard).join("")}
     </div>
@@ -1798,7 +1798,7 @@ function historyReminderPanel(rows) {
 function historyPriorityPanel(rows) {
   if (!rows.length) return "";
   return `<section class="history-panel">
-    <div class="section-head"><h3>Baixa aÃ§Ã£o comercial</h3><span class="hint">SugestÃµes para montar a prÃ³xima programaÃ§Ã£o</span></div>
+    <div class="section-head"><h3>Baixa ação comercial</h3><span class="hint">Sugestões para montar a próxima programação</span></div>
     <div class="history-card-grid">
       ${rows.map(historyPriorityCard).join("")}
     </div>
@@ -1808,8 +1808,8 @@ function historyPriorityPanel(rows) {
 function historyReminderCard(row) {
   return `<article class="history-card ${row.overdue ? "danger" : ""}">
     <div><strong>${escapeHtml(row.condoName)}</strong><span>${escapeHtml(row.reminderText)}</span></div>
-    <small>Ãšltima aÃ§Ã£o: ${row.lastDate ? fmtDate(row.lastDate) : "Nunca"}${row.lastSource ? ` | ${escapeHtml(row.lastSource)}` : ""}</small>
-    <small>${escapeHtml(row.sellers || "Sem responsÃ¡vel recente")}</small>
+    <small>Última ação: ${row.lastDate ? fmtDate(row.lastDate) : "Nunca"}${row.lastSource ? ` | ${escapeHtml(row.lastSource)}` : ""}</small>
+    <small>${escapeHtml(row.sellers || "Sem responsável recente")}</small>
     ${historyRowActions(row)}
   </article>`;
 }
@@ -1817,15 +1817,15 @@ function historyReminderCard(row) {
 function historyPriorityCard(row) {
   return `<article class="history-card priority">
     <div><strong>${escapeHtml(row.condoName)}</strong><span>${escapeHtml(row.priorityText)}</span></div>
-    <small>Ãšltima aÃ§Ã£o: ${row.lastDate ? fmtDate(row.lastDate) : "Nunca"} | ${row.actions30} aÃ§Ã£o(Ãµes) em 30 dias</small>
-    <small>Ãšltima venda: ${row.lastSaleDate ? fmtDate(row.lastSaleDate) : "Sem venda registrada"} | ${row.sales60} venda(s) em 60 dias</small>
+    <small>Última ação: ${row.lastDate ? fmtDate(row.lastDate) : "Nunca"} | ${row.actions30} ação(ões) em 30 dias</small>
+    <small>Última venda: ${row.lastSaleDate ? fmtDate(row.lastSaleDate) : "Sem venda registrada"} | ${row.sales60} venda(s) em 60 dias</small>
     ${historyRowActions(row)}
   </article>`;
 }
 
 function historyLastActionCell(row) {
   if (!row.lastDate) return `Nunca<small>Programar primeira ida</small>`;
-  return `${fmtDate(row.lastDate)}<small>${escapeHtml(row.lastSource || "AÃ§Ã£o")} | ${escapeHtml(row.sellers || "-")}</small>`;
+  return `${fmtDate(row.lastDate)}<small>${escapeHtml(row.lastSource || "Ação")} | ${escapeHtml(row.sellers || "-")}</small>`;
 }
 
 function historyLastSaleCell(row) {
@@ -1839,7 +1839,7 @@ function historyReminderCell(row) {
 }
 
 function historyMovementCell(row) {
-  return `${row.actions30} aÃ§Ã£o(Ãµes) em 30 dias<small>${row.actions60} em 60 dias | HistÃ³rico total: ${row.count}</small>`;
+  return `${row.actions30} ação(ões) em 30 dias<small>${row.actions60} em 60 dias | Histórico total: ${row.count}</small>`;
 }
 
 function historyRowActions(row) {
@@ -1856,7 +1856,7 @@ function scheduleHistoryRows(options = {}) {
   });
   const ensureRow = (condoId, fallback = {}) => {
     const condo = findById("condos", condoId);
-    if (!byCondo.has(condoId)) byCondo.set(condoId, emptyHistoryRow(condoId, fallback.condoName || condo?.name || "CondomÃ­nio", fallback.address || condo?.address || ""));
+    if (!byCondo.has(condoId)) byCondo.set(condoId, emptyHistoryRow(condoId, fallback.condoName || condo?.name || "Condomínio", fallback.address || condo?.address || ""));
     return byCondo.get(condoId);
   };
   const addAction = (condoId, action) => {
@@ -1869,7 +1869,7 @@ function scheduleHistoryRows(options = {}) {
     if (days <= 60) row.actions60 += 1;
     if (!row.lastDate || actionDate > row.lastDate) {
       row.lastDate = actionDate;
-      row.lastSource = action.source || "AÃ§Ã£o";
+      row.lastSource = action.source || "Ação";
       row.nextDate = action.nextDate ? dateOnly(action.nextDate) : addDaysISO(actionDate, Number(action.followUpDays || 30));
       row.sellers = action.sellers || "";
       row.workArea = action.workArea || "";
@@ -1879,7 +1879,7 @@ function scheduleHistoryRows(options = {}) {
     date: item.date,
     condoName: item.condoName,
     address: item.address || findById("condos", item.condoId)?.address || "",
-    source: "ProgramaÃ§Ã£o",
+    source: "Programação",
     sellers: scheduleSellers(item),
     workArea: item.workArea || item.accessMode || "",
     followUpDays: item.followUpDays || 30
@@ -1888,7 +1888,7 @@ function scheduleHistoryRows(options = {}) {
     const condo = findById("condos", visit.condoId);
     addAction(visit.condoId, {
       date: visit.date,
-      condoName: condo?.name || "CondomÃ­nio",
+      condoName: condo?.name || "Condomínio",
       address: condo?.address || "",
       source: "Relacionamento",
       sellers: findById("sellers", visit.sellerId)?.name || visit.responsible || "Visita registrada",
@@ -1964,25 +1964,25 @@ function historyPriorityScore(row) {
 }
 
 function historyReminderText(row) {
-  if (!row.lastDate) return "Primeira aÃ§Ã£o pendente";
+  if (!row.lastDate) return "Primeira ação pendente";
   if (!row.nextDate) return "Definir retorno";
-  if (row.nextDelta < 0) return `Vencido hÃ¡ ${Math.abs(row.nextDelta)} dia(s)`;
+  if (row.nextDelta < 0) return `Vencido há ${Math.abs(row.nextDelta)} dia(s)`;
   if (row.nextDelta === 0) return "Retorno hoje";
   return `Retorno em ${row.nextDelta} dia(s)`;
 }
 
 function historyPriorityText(row) {
-  if (!row.lastDate) return "Sem histÃ³rico de aÃ§Ã£o";
-  if (row.daysWithoutAction > 60) return `Sem aÃ§Ã£o hÃ¡ ${row.daysWithoutAction} dia(s)`;
-  if (row.daysWithoutSale > 60) return `Sem venda hÃ¡ ${row.daysWithoutSale} dia(s)`;
-  if (!row.actions30) return "Sem aÃ§Ã£o nos Ãºltimos 30 dias";
-  return "Acompanhar recorrÃªncia";
+  if (!row.lastDate) return "Sem histórico de ação";
+  if (row.daysWithoutAction > 60) return `Sem ação há ${row.daysWithoutAction} dia(s)`;
+  if (row.daysWithoutSale > 60) return `Sem venda há ${row.daysWithoutSale} dia(s)`;
+  if (!row.actions30) return "Sem ação nos últimos 30 dias";
+  return "Acompanhar recorrência";
 }
 
 function openScheduleForCondo(condoId) {
   const row = scheduleHistoryRows({ ignoreQuery: true }).find((item) => item.condoId === condoId);
   const condo = findById("condos", condoId);
-  if (!condo && !row) return alert("CondomÃ­nio nÃ£o localizado para programar.");
+  if (!condo && !row) return alert("Condomínio não localizado para programar.");
   const targetDate = row?.nextDate && row.nextDelta >= 0 ? row.nextDate : todayISO();
   openForm("weeklySchedules", {
     condoId,
@@ -1991,11 +1991,11 @@ function openScheduleForCondo(condoId) {
     date: targetDate,
     startTime: "09:00",
     endTime: "12:00",
-    workArea: "AÃ§Ã£o comercial / relacionamento",
+    workArea: "Ação comercial / relacionamento",
     accessMode: "Pode entrar",
     status: "Programada",
     followUpDays: 30,
-    notes: row ? `${row.reminderText}. ${row.priorityText}. Ãšltima aÃ§Ã£o: ${row.lastDate ? fmtDate(row.lastDate) : "sem histÃ³rico"}.` : "ProgramaÃ§Ã£o criada a partir do histÃ³rico."
+    notes: row ? `${row.reminderText}. ${row.priorityText}. Última ação: ${row.lastDate ? fmtDate(row.lastDate) : "sem histórico"}.` : "Programação criada a partir do histórico."
   });
 }
 
@@ -2017,7 +2017,7 @@ function parseCoords(value) {
 }
 
 function openMap(address) {
-  if (!address) return alert("Este registro nÃ£o tem endereÃ§o para abrir no mapa.");
+  if (!address) return alert("Este registro não tem endereço para abrir no mapa.");
   window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`, "_blank");
 }
 
@@ -2042,10 +2042,10 @@ async function readKmlOrKmz(file) {
   const lower = file.name.toLowerCase();
   if (lower.endsWith(".kml")) return file.text();
   if (!lower.endsWith(".kmz")) throw new Error("Importe apenas arquivos KML ou KMZ.");
-  if (!window.JSZip) throw new Error("Leitor KMZ nÃ£o carregou. Atualize a pÃ¡gina e tente novamente.");
+  if (!window.JSZip) throw new Error("Leitor KMZ não carregou. Atualize a página e tente novamente.");
   const zip = await window.JSZip.loadAsync(await file.arrayBuffer());
   const kmlEntry = Object.values(zip.files).find((entry) => entry.name.toLowerCase().endsWith(".kml"));
-  if (!kmlEntry) throw new Error(`O arquivo ${file.name} nÃ£o contÃ©m KML.`);
+  if (!kmlEntry) throw new Error(`O arquivo ${file.name} não contém KML.`);
   return kmlEntry.async("text");
 }
 
@@ -2085,8 +2085,8 @@ function googleMapOverlay(points) {
     ${maxPins.map((point) => {
       const left = Math.min(96, Math.max(4, ((point.lng - minLng) / rangeLng) * 92 + 4));
       const top = Math.min(92, Math.max(8, (1 - ((point.lat - minLat) / rangeLat)) * 84 + 8));
-      const label = point.kind === "CondomÃ­nio" ? "C" : "R";
-      return `<button class="google-pin ${point.kind === "CondomÃ­nio" ? "condo" : "network"}" style="left:${left}%;top:${top}%" title="${escapeHtml(point.label)}" data-map-query="${escapeHtml(point.address || `${point.lat},${point.lng}`)}">${label}</button>`;
+      const label = point.kind === "Condomínio" ? "C" : "R";
+      return `<button class="google-pin ${point.kind === "Condomínio" ? "condo" : "network"}" style="left:${left}%;top:${top}%" title="${escapeHtml(point.label)}" data-map-query="${escapeHtml(point.address || `${point.lat},${point.lng}`)}">${label}</button>`;
     }).join("")}
   </div>`;
 }
@@ -2104,7 +2104,7 @@ function buildCoverageKml() {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
-    <name>Sistema de GestÃ£o Comercial - Cobertura</name>
+    <name>Sistema de Gestão Comercial - Cobertura</name>
     ${condoPlacemarks}
     ${layerPlacemarks}
     ${imported.replace(/<\?xml[^>]*>/g, "").replace(/<\/?kml[^>]*>/g, "").replace(/<\/?Document[^>]*>/g, "")}
@@ -2123,7 +2123,7 @@ function exportMapList() {
   });
   const fileRows = mapState.files.flatMap((file) => file.points.map((point) => [point.label, file.name, point.lat, point.lng].join("\t")));
   const preloadedRows = mapState.preloaded.flatMap((file) => (file.points || []).map((point) => [point.label, file.name, point.lat, point.lng].join("\t")));
-  const content = [["Nome", "Origem/EndereÃ§o", "Latitude", "Longitude"].join("\t"), ...condoRows, ...preloadedRows, ...fileRows].join("\n");
+  const content = [["Nome", "Origem/Endereço", "Latitude", "Longitude"].join("\t"), ...condoRows, ...preloadedRows, ...fileRows].join("\n");
   download(new Blob([content], { type: "text/plain;charset=utf-8" }), `lista-mapa-${todayISO()}.txt`);
 }
 
@@ -2152,7 +2152,7 @@ function coverageCanvas(points, importedPoints = []) {
       const importedClass = imported ? "imported" : "";
       return `<button class="map-point ${active} ${importedClass}" style="left:${left}%;top:${top}%" title="${escapeHtml(condo.name)}" data-map-query="${escapeHtml(condo.address || condo.name)}"></button>`;
     }).join("")}
-    <div class="map-legend"><span><i></i> Cobertura cadastrada</span><span><i class="active"></i> Na programaÃ§Ã£o</span><span><i class="imported"></i> KML/KMZ</span></div>
+    <div class="map-legend"><span><i></i> Cobertura cadastrada</span><span><i class="active"></i> Na programação</span><span><i class="imported"></i> KML/KMZ</span></div>
   </div>`;
 }
 
@@ -2234,13 +2234,13 @@ async function importWeeklySchedulePdf(event) {
       status: "ready",
       rawText: text,
       rows,
-      message: `${rows.length} linha(s) identificada(s). ${ready} pronta(s) para lanÃ§ar.`
+      message: `${rows.length} linha(s) identificada(s). ${ready} pronta(s) para lançar.`
     };
   } catch (error) {
     state.scheduleImport = {
       ...state.scheduleImport,
       status: "error",
-      message: `NÃ£o foi possÃ­vel ler o PDF: ${error.message}`,
+      message: `Não foi possível ler o PDF: ${error.message}`,
       rows: [],
       rawText: ""
     };
@@ -2339,11 +2339,10 @@ function stripWeekdayFromScheduleLine(line) {
   const labels = [
     "SEGUNDA-FEIRA", "SEGUNDA FEIRA", "SEGUNDA",
     "TERCA-FEIRA", "TERCA FEIRA", "TERCA",
-    "TERÃ‡A-FEIRA", "TERÃ‡A FEIRA", "TERÃ‡A",
     "QUARTA-FEIRA", "QUARTA FEIRA", "QUARTA",
     "QUINTA-FEIRA", "QUINTA FEIRA", "QUINTA",
     "SEXTA-FEIRA", "SEXTA FEIRA", "SEXTA",
-    "SABADO", "SÃBADO"
+    "SABADO", "SÁBADO"
   ];
   let text = ` ${line} `;
   labels.forEach((label) => {
@@ -2403,11 +2402,11 @@ function ignoreScheduleImportLine(line) {
   const value = normalizeKey(line);
   if (!value) return true;
   if (/^\d{1,2}H(?:\d{2})?(?:\s|-|A|AS)*\d{0,2}H?\d{0,2}$/.test(value)) return true;
-  return ["PROGRAMACAO", "PROGRAMAÃ‡ÃƒO", "DA SEMANA", "CAMPO SEMANAL", "REGIAO", "REGIÃƒO", "ATIVIDADE", "CONDOMINIOS RUA", "HORARIO", "SABADO"].some((token) => value.includes(normalizeKey(token)));
+  return ["PROGRAMACAO", "DA SEMANA", "CAMPO SEMANAL", "REGIAO", "ATIVIDADE", "CONDOMINIOS RUA", "HORARIO", "SABADO"].some((token) => value.includes(normalizeKey(token)));
 }
 
 function extractScheduleTime(line) {
-  const match = String(line).match(/(\d{1,2})\s*h(?:[:.]?(\d{2}))?\s*(?:-|a|Ã s|as)\s*(\d{1,2})\s*h(?:[:.]?(\d{2}))?/i);
+  const match = String(line).match(/(\d{1,2})\s*h(?:[:.]?(\d{2}))?\s*(?:-|a|às|as)\s*(\d{1,2})\s*h(?:[:.]?(\d{2}))?/i);
   if (!match) return { text: line, startTime: "08:00", endTime: "17:00" };
   const startTime = `${match[1].padStart(2, "0")}:${match[2] || "00"}`;
   const endTime = `${match[3].padStart(2, "0")}:${match[4] || "00"}`;
@@ -2435,8 +2434,8 @@ function resolveScheduleImportRow(row, dayIndex, weekStart) {
   const seller = row.seller || findBestSeller(row.consultantText);
   const condo = findBestCondo(row.condoText);
   const issue = [
-    seller ? "" : "consultor nÃ£o cadastrado",
-    condo ? "" : "condomÃ­nio nÃ£o localizado"
+    seller ? "" : "consultor não cadastrado",
+    condo ? "" : "condomínio não localizado"
   ].filter(Boolean).join("; ");
   return {
     dayIndex: boundedDayIndex,
@@ -2454,7 +2453,7 @@ function resolveScheduleImportRow(row, dayIndex, weekStart) {
     accessMode: "Pode entrar",
     status: "Programada",
     followUpDays: 30,
-    workArea: "Ãrea geral",
+    workArea: "Área geral",
     issue: issue || "",
     ready: Boolean(seller && condo)
   };
@@ -2571,11 +2570,11 @@ function levenshteinDistance(a, b) {
 function importWeekdays() {
   return [
     { label: "Segunda-feira", offset: 0 },
-    { label: "TerÃ§a-feira", offset: 1 },
+    { label: "Terça-feira", offset: 1 },
     { label: "Quarta-feira", offset: 2 },
     { label: "Quinta-feira", offset: 3 },
     { label: "Sexta-feira", offset: 4 },
-    { label: "SÃ¡bado", offset: 5 }
+    { label: "Sábado", offset: 5 }
   ];
 }
 
@@ -2634,15 +2633,13 @@ function normalizeSchedulePeriod(period = {}) {
 
 function schedulePeriodLabel(period = schedulePeriodFromDate(todayISO())) {
   const selected = normalizeSchedulePeriod(period) || schedulePeriodFromDate(todayISO());
-  return `PerÃ­odo: ${fmtDate(selected.from)} a ${fmtDate(selected.to)}`;
+  return `Período: ${fmtDate(selected.from)} a ${fmtDate(selected.to)}`;
 }
 
 function normalizeKey(value) {
   return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/Ãƒâ€¡/g, "C")
-    .replace(/Ãƒ/g, "A")
     .replace(/[^A-Z0-9]+/gi, " ")
     .trim()
     .toUpperCase();
@@ -2659,7 +2656,7 @@ function applyImportCondo(index, condoId) {
   if (!condo || !state.scheduleImport.rows[rowIndex]) return;
   const row = state.scheduleImport.rows[rowIndex];
   const issue = [
-    row.sellerIds?.length ? "" : "consultor nÃ£o cadastrado",
+    row.sellerIds?.length ? "" : "consultor não cadastrado",
     ""
   ].filter(Boolean).join("; ");
   state.scheduleImport.rows[rowIndex] = {
@@ -2671,15 +2668,15 @@ function applyImportCondo(index, condoId) {
     ready: Boolean(row.sellerIds?.length && condo.id)
   };
   const ready = state.scheduleImport.rows.filter((item) => item.ready).length;
-  state.scheduleImport.message = `${state.scheduleImport.rows.length} linha(s) identificada(s). ${ready} pronta(s) para lanÃ§ar.`;
+  state.scheduleImport.message = `${state.scheduleImport.rows.length} linha(s) identificada(s). ${ready} pronta(s) para lançar.`;
   render();
 }
 
 async function commitScheduleImport() {
   const rows = state.scheduleImport.rows.filter((row) => row.ready && !isDuplicateImportedSchedule(row));
   const duplicates = state.scheduleImport.rows.filter((row) => row.ready && isDuplicateImportedSchedule(row)).length;
-  if (!rows.length) return alert(duplicates ? "Todas as rotas prontas jÃ¡ existem na programaÃ§Ã£o." : "Nenhuma rota pronta para lanÃ§ar.");
-  if (!confirm(`LanÃ§ar ${rows.length} rota(s) na programaÃ§Ã£o?${duplicates ? ` ${duplicates} duplicada(s) serÃ£o ignoradas.` : ""}`)) return;
+  if (!rows.length) return alert(duplicates ? "Todas as rotas prontas já existem na programação." : "Nenhuma rota pronta para lançar.");
+  if (!confirm(`Lançar ${rows.length} rota(s) na programação?${duplicates ? ` ${duplicates} duplicada(s) serão ignoradas.` : ""}`)) return;
   let imported = 0;
   for (const row of rows) {
     await request("/api/weeklySchedules", {
@@ -2697,7 +2694,7 @@ async function commitScheduleImport() {
         accessMode: row.accessMode,
         status: row.status,
         followUpDays: row.followUpDays,
-        notes: `Importado do PDF ${state.scheduleImport.fileName || "ProgramaÃ§Ã£o semanal"}`
+        notes: `Importado do PDF ${state.scheduleImport.fileName || "Programação semanal"}`
       }
     });
     imported += 1;
@@ -2705,7 +2702,7 @@ async function commitScheduleImport() {
   await loadAll();
   const launchedWeek = rows[0]?.date ? currentMondayISO(new Date(`${rows[0].date}T12:00:00`)) : state.scheduleImport.weekStart || currentMondayISO();
   state.scheduleWeekStart = launchedWeek;
-  state.scheduleImport = { status: "done", fileName: "", message: `${imported} rota(s) lanÃ§ada(s). ${duplicates} duplicada(s) ignorada(s). Semanas anteriores continuam salvas no histÃ³rico.`, rows: [], rawText: "", weekStart: launchedWeek };
+  state.scheduleImport = { status: "done", fileName: "", message: `${imported} rota(s) lançada(s). ${duplicates} duplicada(s) ignorada(s). Semanas anteriores continuam salvas no histórico.`, rows: [], rawText: "", weekStart: launchedWeek };
   render();
 }
 
@@ -2740,7 +2737,7 @@ function isDeletedImportedSchedule(row) {
 }
 
 async function removeItem(collection, id) {
-  const text = collection === "weeklySchedules" ? "Deseja excluir esta programaÃ§Ã£o?" : "Deseja excluir este registro?";
+  const text = collection === "weeklySchedules" ? "Deseja excluir esta programação?" : "Deseja excluir este registro?";
   if (!confirm(text)) return;
   await request(`/api/${collection}/${id}`, { method: "DELETE" });
   await loadAll();
@@ -2750,7 +2747,7 @@ async function removeItem(collection, id) {
 async function removeSelectedSchedules() {
   const ids = [...state.selectedSchedules].filter(Boolean);
   if (!ids.length) return;
-  if (!confirm(`Deseja excluir ${ids.length} programaÃ§Ã£o(Ãµes) selecionada(s)?`)) return;
+  if (!confirm(`Deseja excluir ${ids.length} programação(ões) selecionada(s)?`)) return;
   for (const id of ids) {
     await request(`/api/weeklySchedules/${id}`, { method: "DELETE" });
   }
@@ -2821,8 +2818,8 @@ function openEmail(ref) {
   const event = eventFromRef(ref);
   if (!event) return;
   const to = event.attendees?.length ? event.attendees.join(",") : state.settings.notificationEmail || state.settings.adminEmail || "";
-  const subject = `ProgramaÃ§Ã£o - ${event.title}`;
-  const body = `Sistema de GestÃ£o Comercial\n\nAtividade: ${event.title}\nData: ${fmtDateTime(event.date)}\nStatus: ${event.status}\nEndereÃ§o: ${event.location || "-"}\n\nObs:\n${event.note || ""}`;
+  const subject = `Programação - ${event.title}`;
+  const body = `Sistema de Gestão Comercial\n\nAtividade: ${event.title}\nData: ${fmtDateTime(event.date)}\nStatus: ${event.status}\nEndereço: ${event.location || "-"}\n\nObs:\n${event.note || ""}`;
   openShareEmailModal({ to, subject, body, rows: [] });
 }
 
@@ -2834,7 +2831,7 @@ function openWeeklyScheduleEmail(ref) {
   const rows = scheduleRowsForExport(period);
   const emails = [...new Set(rows.flatMap(scheduleSellerEmails))];
   const to = emails.length ? emails.join(",") : state.settings.notificationEmail || state.settings.adminEmail || "";
-  const subject = `ProgramaÃ§Ã£o semanal da equipe - ${schedulePeriodLabel(period)}`;
+  const subject = `Programação semanal da equipe - ${schedulePeriodLabel(period)}`;
   const body = buildWeeklyScheduleText({ rows, period });
   openShareEmailModal({ to, subject, body, rows, period });
 }
@@ -2844,10 +2841,10 @@ function openShareEmailModal({ to, subject, body, rows = [], period = null }) {
   modal.querySelector("h3").textContent = "Enviar equipe";
   modal.querySelector(".modal-body").innerHTML = `
     <div class="share-email">
-      <label>DestinatÃ¡rios<input name="to" value="${escapeHtml(to || "")}" readonly></label>
+      <label>Destinatários<input name="to" value="${escapeHtml(to || "")}" readonly></label>
       <label>Assunto<input name="subject" value="${escapeHtml(subject || "")}" readonly></label>
       <label class="full">Mensagem<textarea name="body" readonly>${escapeHtml(body || "")}</textarea></label>
-      <p class="hint">Se o email automÃ¡tico nÃ£o abrir no seu computador, copie a mensagem ou baixe o arquivo de agenda para enviar no grupo/equipe.</p>
+      <p class="hint">Se o email automático não abrir no seu computador, copie a mensagem ou baixe o arquivo de agenda para enviar no grupo/equipe.</p>
     </div>`;
   const footer = modal.querySelector("footer");
   footer.innerHTML = `
@@ -2870,13 +2867,13 @@ function openShareEmailModal({ to, subject, body, rows = [], period = null }) {
 function downloadScheduleIcs(rows = [], period = null) {
   const events = rows.filter((item) => item.date).map((item) => {
     const condo = findById("condos", item.condoId);
-    const title = `${condo?.name || item.condoName || "ProgramaÃ§Ã£o"} - ${scheduleSellers(item) || "Equipe"}`;
+    const title = `${condo?.name || item.condoName || "Programação"} - ${scheduleSellers(item) || "Equipe"}`;
     const location = item.address || condo?.address || "";
     const description = [
       `Consultores: ${scheduleSellers(item) || "-"}`,
       `Status: ${item.status || "Programada"}`,
-      `AtuaÃ§Ã£o: ${item.accessMode || "-"} | ${item.workArea || "-"}`,
-      item.notes ? `OrientaÃ§Ã£o: ${item.notes}` : ""
+      `Atuação: ${item.accessMode || "-"} | ${item.workArea || "-"}`,
+      item.notes ? `Orientação: ${item.notes}` : ""
     ].filter(Boolean).join("\\n");
     return [
       "BEGIN:VEVENT",
@@ -2896,7 +2893,7 @@ function downloadScheduleIcs(rows = [], period = null) {
     "PRODID:-//WS Consultoria//Programacao Semanal//PT-BR",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    "X-WR-CALNAME:ProgramaÃ§Ã£o WS Consultoria",
+    "X-WR-CALNAME:Programação WS Consultoria",
     "X-WR-TIMEZONE:America/Sao_Paulo",
     ...events,
     "END:VCALENDAR"
@@ -2931,17 +2928,17 @@ function eventFromRef(ref) {
     if (!item) return null;
     const date = item.date ? `${item.date}T${item.startTime || "09:00"}:00` : "";
     const endDate = item.date ? `${item.date}T${item.endTime || "10:00"}:00` : "";
-    return { id, type, date, endDate, condoId: item.condoId, sellerId: item.sellerId, sellerIds: item.sellerIds, attendees: scheduleSellerEmails(item), title: `${condo?.name || item.condoName || "ProgramaÃ§Ã£o"} - ${scheduleSellers(item) || "Equipe"}`, status: item.status, note: item.notes || item.workArea || item.accessMode || "", location: item.address || condo?.address || "" };
+    return { id, type, date, endDate, condoId: item.condoId, sellerId: item.sellerId, sellerIds: item.sellerIds, attendees: scheduleSellerEmails(item), title: `${condo?.name || item.condoName || "Programação"} - ${scheduleSellers(item) || "Equipe"}`, status: item.status, note: item.notes || item.workArea || item.accessMode || "", location: item.address || condo?.address || "" };
   }
   const item = findById("expansions", id);
   if (!item) return null;
-  return { id, type, date: item.date || item.expectedDate, condoId: item.condoId, sellerId: item.sellerId, title: `${item.type || "ExpansÃ£o"} - ${item.condoName || "CondomÃ­nio"}`, status: item.status, note: item.notes || `Protocolo IXC: ${item.protocol || "-"}`, location: item.address || "" };
+  return { id, type, date: item.date || item.expectedDate, condoId: item.condoId, sellerId: item.sellerId, title: `${item.type || "Expansão"} - ${item.condoName || "Condomínio"}`, status: item.status, note: item.notes || `Protocolo IXC: ${item.protocol || "-"}`, location: item.address || "" };
 }
 
 function backupData() {
   const content = JSON.stringify(state.data, null, 2);
   navigator.clipboard.writeText(content)
-    .then(() => alert("Backup copiado. VocÃª pode colar em um arquivo ou mensagem."))
+    .then(() => alert("Backup copiado. Você pode colar em um arquivo ou mensagem."))
     .catch(() => download(new Blob([content], { type: "application/json" }), `backup-ws-consultoria-${todayISO()}.json`));
 }
 
@@ -2957,8 +2954,8 @@ function downloadReport() {
 function printExecutiveReport() {
   const filter = activeReportFilter();
   const win = window.open("", "_blank", "width=1200,height=800");
-  if (!win) return alert("Permita pop-ups para gerar o relatÃ³rio em PDF.");
-  win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>RelatÃ³rio - ${escapeHtml(reportLabel(filter))}</title>${reportPrintStyles()}</head><body>${reportDocumentHtml(filter)}</body></html>`);
+  if (!win) return alert("Permita pop-ups para gerar o relatório em PDF.");
+  win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório - ${escapeHtml(reportLabel(filter))}</title>${reportPrintStyles()}</head><body>${reportDocumentHtml(filter)}</body></html>`);
   win.document.close();
   win.focus();
   setTimeout(() => win.print(), 450);
@@ -2995,12 +2992,12 @@ function reportPrintStyles() {
 
 function reportAreas() {
   return [
-    ["geral", "Geral", "VisÃ£o executiva com os principais indicadores."],
-    ["vendas", "Vendas", "ProduÃ§Ã£o comercial, ranking e vendas recentes."],
-    ["visitas", "Relacionamento", "SÃ­ndicos, administradoras, cupons e retornos."],
-    ["programacao", "ProgramaÃ§Ã£o", "Roteiros semanais e atuaÃ§Ã£o da equipe."],
-    ["expansao", "ExpansÃ£o", "Vistorias, inspeÃ§Ãµes e implantaÃ§Ãµes."],
-    ["condominios", "CondomÃ­nios", "Cadastro mestre, status e prioridades."],
+    ["geral", "Geral", "Visão executiva com os principais indicadores."],
+    ["vendas", "Vendas", "Produção comercial, ranking e vendas recentes."],
+    ["visitas", "Relacionamento", "Síndicos, administradoras, cupons e retornos."],
+    ["programacao", "Programação", "Roteiros semanais e atuação da equipe."],
+    ["expansao", "Expansão", "Vistorias, inspeções e implantações."],
+    ["condominios", "Condomínios", "Cadastro mestre, status e prioridades."],
     ["planos", "Planos", "Planos ativos, valores e velocidades."]
   ];
 }
@@ -3019,7 +3016,7 @@ function reportCharts(filter = state.reportFilter) {
     <div class="section-head">
       <div>
         <h3>Leitura visual</h3>
-        <p class="hint">GrÃ¡ficos dinÃ¢micos da Ã¡rea selecionada para acompanhar tendÃªncia, volume e concentraÃ§Ã£o.</p>
+        <p class="hint">Gráficos dinâmicos da área selecionada para acompanhar tendência, volume e concentração.</p>
       </div>
     </div>
     <div class="analytics-grid">
@@ -3050,7 +3047,7 @@ function reportChartData(filter) {
     return {
       primaryTitle: "Rotas por dia",
       primary: byDay,
-      secondaryTitle: "Status da programaÃ§Ã£o",
+      secondaryTitle: "Status da programação",
       secondary: counts(rows, "status"),
       tertiaryTitle: "Rotas por consultor",
       tertiary: [...sellerMap.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8)
@@ -3072,15 +3069,15 @@ function reportChartData(filter) {
       primary: counts(state.data.expansions, "status").slice(0, 8),
       secondaryTitle: "Tipo da demanda",
       secondary: counts(state.data.expansions, "type"),
-      tertiaryTitle: "ResponsÃ¡veis",
-      tertiary: counts(state.data.expansions.map((item) => ({ owner: findById("sellers", item.sellerId)?.name || item.responsible || "Sem responsÃ¡vel" })), "owner").slice(0, 8)
+      tertiaryTitle: "Responsáveis",
+      tertiary: counts(state.data.expansions.map((item) => ({ owner: findById("sellers", item.sellerId)?.name || item.responsible || "Sem responsável" })), "owner").slice(0, 8)
     };
   }
   if (filter === "condominios") {
     return {
-      primaryTitle: "CondomÃ­nios por bairro",
+      primaryTitle: "Condomínios por bairro",
       primary: counts(state.data.condos, "neighborhood").sort((a, b) => b.value - a.value).slice(0, 8),
-      secondaryTitle: "Status dos condomÃ­nios",
+      secondaryTitle: "Status dos condomínios",
       secondary: counts(state.data.condos, "status"),
       tertiaryTitle: "Cidades",
       tertiary: counts(state.data.condos, "city").slice(0, 8)
@@ -3090,12 +3087,12 @@ function reportChartData(filter) {
   return {
     primaryTitle: "Vendas por vendedor",
     primary: sellerRanking().slice(0, 6).map((row) => ({ label: row.name, value: row.count })),
-    secondaryTitle: "OperaÃ§Ã£o geral",
+    secondaryTitle: "Operação geral",
     secondary: [
       { label: "Vendas", value: sales.length },
       { label: "Relacionamentos", value: state.data.visits.length },
-      { label: "ProgramaÃ§Ãµes", value: state.data.weeklySchedules.length },
-      { label: "ExpansÃ£o", value: state.data.expansions.length }
+      { label: "Programações", value: state.data.weeklySchedules.length },
+      { label: "Expansão", value: state.data.expansions.length }
     ],
     tertiaryTitle: "Relacionamentos por status",
     tertiary: counts(state.data.visits, "status").slice(0, 8)
@@ -3112,7 +3109,7 @@ function advancedBarChart(title, rows) {
         <span>${escapeHtml(row.label)}</span>
         <div><i style="width:${Math.max(6, (Number(row.value || 0) / max) * 100)}%"></i></div>
         <strong>${row.value}</strong>
-      </div>`).join("") : `<div class="empty compact">Sem dados para grÃ¡fico.</div>`}
+      </div>`).join("") : `<div class="empty compact">Sem dados para gráfico.</div>`}
     </div>
   </article>`;
 }
@@ -3140,40 +3137,40 @@ function advancedDonutChart(title, rows) {
 }
 
 function reportOptionList(filter = state.reportFilter) {
-  const commonMetrics = { key: "metrics", label: "Indicadores", description: "Cards principais do mÃ³dulo escolhido." };
+  const commonMetrics = { key: "metrics", label: "Indicadores", description: "Cards principais do módulo escolhido." };
   const map = {
     geral: [
       commonMetrics,
-      { key: "salesRanking", label: "Ranking comercial", description: "Vendedores com vendas e receita no mÃªs." },
-      { key: "relationships", label: "Relacionamento", description: "CondomÃ­nios que precisam de retorno." },
-      { key: "expansion", label: "ExpansÃ£o", description: "Demandas abertas e prÃ³ximas etapas." },
+      { key: "salesRanking", label: "Ranking comercial", description: "Vendedores com vendas e receita no mês." },
+      { key: "relationships", label: "Relacionamento", description: "Condomínios que precisam de retorno." },
+      { key: "expansion", label: "Expansão", description: "Demandas abertas e próximas etapas." },
       { key: "plans", label: "Planos", description: "Planos ativos mais relevantes." }
     ],
     vendas: [
       commonMetrics,
-      { key: "salesRanking", label: "Ranking comercial", description: "Ranking automÃ¡tico por vendedor." },
-      { key: "latestSales", label: "Vendas recentes", description: "Ãšltimos lanÃ§amentos com status e valor." },
-      { key: "salesStatus", label: "Status das vendas", description: "Resumo por situaÃ§Ã£o comercial." }
+      { key: "salesRanking", label: "Ranking comercial", description: "Ranking automático por vendedor." },
+      { key: "latestSales", label: "Vendas recentes", description: "Últimos lançamentos com status e valor." },
+      { key: "salesStatus", label: "Status das vendas", description: "Resumo por situação comercial." }
     ],
     visitas: [
       commonMetrics,
-      { key: "relationships", label: "Relacionamento prioritÃ¡rio", description: "Retornos, status e qualidade da relaÃ§Ã£o." },
-      { key: "upcomingVisits", label: "PrÃ³ximas visitas", description: "Agenda futura de relacionamento." },
-      { key: "condoPriorities", label: "CondomÃ­nios sem visita", description: "Locais que ficaram muito tempo sem passagem." }
+      { key: "relationships", label: "Relacionamento prioritário", description: "Retornos, status e qualidade da relação." },
+      { key: "upcomingVisits", label: "Próximas visitas", description: "Agenda futura de relacionamento." },
+      { key: "condoPriorities", label: "Condomínios sem visita", description: "Locais que ficaram muito tempo sem passagem." }
     ],
     programacao: [
       commonMetrics,
-      { key: "scheduleByDay", label: "Roteiro por dia", description: "ProgramaÃ§Ãµes agrupadas por data." },
-      { key: "scheduleConsultants", label: "Consultores na rota", description: "DistribuiÃ§Ã£o da equipe por programaÃ§Ã£o." }
+      { key: "scheduleByDay", label: "Roteiro por dia", description: "Programações agrupadas por data." },
+      { key: "scheduleConsultants", label: "Consultores na rota", description: "Distribuição da equipe por programação." }
     ],
     expansao: [
       commonMetrics,
-      { key: "expansion", label: "Demandas abertas", description: "Vistorias, inspeÃ§Ãµes e implantaÃ§Ãµes pendentes." },
-      { key: "expansionStatus", label: "Resumo por status", description: "Quantidade por estÃ¡gio da demanda." }
+      { key: "expansion", label: "Demandas abertas", description: "Vistorias, inspeções e implantações pendentes." },
+      { key: "expansionStatus", label: "Resumo por status", description: "Quantidade por estágio da demanda." }
     ],
     condominios: [
       commonMetrics,
-      { key: "condoMaster", label: "Cadastro mestre", description: "CondomÃ­nios com cidade, bairro e status." },
+      { key: "condoMaster", label: "Cadastro mestre", description: "Condomínios com cidade, bairro e status." },
       { key: "condoPriorities", label: "Sem visita recente", description: "Locais que exigem planejamento de retorno." }
     ],
     planos: [
@@ -3218,16 +3215,16 @@ function reportDocumentHtml(filter = state.reportFilter) {
       <img class="report-logo" src="${escapeHtml(logo)}" alt="Logo">
       <div>
         <h1>${escapeHtml(reportLabel(filter))}</h1>
-        <div class="subtitle">${escapeHtml(state.settings.companyName || "WS CONSULTORIA")} | Sistema de GestÃ£o Comercial</div>
+        <div class="subtitle">${escapeHtml(state.settings.companyName || "WS CONSULTORIA")} | Sistema de Gestão Comercial</div>
       </div>
       <div class="stamp">
-        <strong>RelatÃ³rio executivo</strong><br>
+        <strong>Relatório executivo</strong><br>
         Gerado em ${fmtDateTime(new Date().toISOString())}<br>
-        ResponsÃ¡vel: ${escapeHtml(state.user?.name || "-")}
+        Responsável: ${escapeHtml(state.user?.name || "-")}
       </div>
     </header>
     ${selected.has("metrics") ? reportEssentialMetrics(filter) : ""}
-    <div class="report-grid">${sections || reportSection("SeleÃ§Ã£o vazia", ["OrientaÃ§Ã£o"], [["Marque ao menos uma informaÃ§Ã£o para compor este relatÃ³rio."]])}</div>
+    <div class="report-grid">${sections || reportSection("Seleção vazia", ["Orientação"], [["Marque ao menos uma informação para compor este relatório."]])}</div>
     <p class="notes">Documento gerado somente com indicadores e registros essenciais para acompanhamento gerencial.</p>
   </main>`;
 }
@@ -3260,8 +3257,8 @@ function reportMetricRows(filter = state.reportFilter) {
   const month = new Date().toISOString().slice(0, 7);
   const salesMonth = visibleSalesRows().filter((sale) => String(sale.date || "").startsWith(month));
   const revenue = salesMonth.reduce((sum, sale) => sum + Number(sale.value || 0), 0);
-  const openVisits = state.data.visits.filter((visit) => !["Finalizado", "Visitado", "Concluida", "ConcluÃ­da"].includes(visit.status)).length;
-  const openExpansions = state.data.expansions.filter((item) => !["ConcluÃ­do", "Reprovado"].includes(item.status)).length;
+  const openVisits = state.data.visits.filter((visit) => !["Finalizado", "Visitado", "Concluida", "Concluída"].includes(visit.status)).length;
+  const openExpansions = state.data.expansions.filter((item) => !["Concluído", "Reprovado"].includes(item.status)).length;
   const latest = latestVisitByCondo();
   const stale30 = state.data.condos.filter((condo) => daysSince(latest.get(condo.id)?.date) > 30).length;
   const weekRows = state.data.weeklySchedules.filter((item) => String(item.date || "").slice(0, 10) >= todayISO());
@@ -3270,9 +3267,9 @@ function reportMetricRows(filter = state.reportFilter) {
   const activeCondos = state.data.condos.filter((condo) => condo.status !== "Inativo");
   const metricMap = {
     vendas: [
-      ["Vendas no mÃªs", salesMonth.length],
-      ["Receita do mÃªs", money(revenue)],
-      ["Ticket mÃ©dio", money(salesMonth.length ? revenue / salesMonth.length : 0)],
+      ["Vendas no mês", salesMonth.length],
+      ["Receita do mês", money(revenue)],
+      ["Ticket médio", money(salesMonth.length ? revenue / salesMonth.length : 0)],
       ["Meta de vendas", visibleCommercialSellers().reduce((sum, seller) => sum + Number(seller.goal || 0), 0)]
     ],
     visitas: [
@@ -3283,18 +3280,18 @@ function reportMetricRows(filter = state.reportFilter) {
     ],
     programacao: [
       ["Rotas futuras", weekRows.length],
-      ["CondomÃ­nios na rota", new Set(weekRows.map((item) => item.condoId).filter(Boolean)).size],
+      ["Condomínios na rota", new Set(weekRows.map((item) => item.condoId).filter(Boolean)).size],
       ["Consultores envolvidos", new Set(weekSellerIds).size],
-      ["AtuaÃ§Ãµes externas", weekRows.filter((item) => item.accessMode === "Ficar externo").length]
+      ["Atuações externas", weekRows.filter((item) => item.accessMode === "Ficar externo").length]
     ],
     expansao: [
       ["Demandas", state.data.expansions.length],
       ["Abertas", openExpansions],
       ["Aprovadas", state.data.expansions.filter((item) => item.status === "Aprovado").length],
-      ["ConcluÃ­das", state.data.expansions.filter((item) => item.status === "ConcluÃ­do").length]
+      ["Concluídas", state.data.expansions.filter((item) => item.status === "Concluído").length]
     ],
     condominios: [
-      ["CondomÃ­nios", state.data.condos.length],
+      ["Condomínios", state.data.condos.length],
       ["Ativos", activeCondos.length],
       ["Cidades", new Set(state.data.condos.map((condo) => condo.city).filter(Boolean)).size],
       ["Unidades", state.data.condos.reduce((sum, condo) => sum + Number(condo.capacity || 0), 0)]
@@ -3302,14 +3299,14 @@ function reportMetricRows(filter = state.reportFilter) {
     planos: [
       ["Planos ativos", activePlans.length],
       ["Promocionais", state.data.plans.filter((plan) => plan.status === "Promocional").length],
-      ["Valor mÃ©dio", money(activePlans.length ? activePlans.reduce((sum, plan) => sum + Number(plan.price || 0), 0) / activePlans.length : 0)],
+      ["Valor médio", money(activePlans.length ? activePlans.reduce((sum, plan) => sum + Number(plan.price || 0), 0) / activePlans.length : 0)],
       ["Cidades atendidas", new Set(activePlans.map((plan) => plan.city).filter(Boolean)).size]
     ],
     geral: [
-      ["Vendas no mÃªs", salesMonth.length],
-      ["Receita do mÃªs", money(revenue)],
+      ["Vendas no mês", salesMonth.length],
+      ["Receita do mês", money(revenue)],
       ["Relacionamentos abertos", openVisits],
-      ["ExpansÃµes abertas", openExpansions]
+      ["Expansões abertas", openExpansions]
     ]
   };
   return metricMap[filter] || metricMap.geral;
@@ -3347,7 +3344,7 @@ function reportEssentialSections(filter = state.reportFilter) {
 
 function reportSalesSection() {
   const ranking = sellerRanking().slice(0, 8);
-  return reportSection("Ranking comercial", ["Vendedor", "Vendas", "Receita", "ConversÃ£o"], ranking.map((row) => [row.name, row.count, money(row.value), `${row.conversion}%`]));
+  return reportSection("Ranking comercial", ["Vendedor", "Vendas", "Receita", "Conversão"], ranking.map((row) => [row.name, row.count, money(row.value), `${row.conversion}%`]));
 }
 
 function reportLatestSalesSection() {
@@ -3364,7 +3361,7 @@ function reportLatestSalesSection() {
       money(sale.value),
       saleStatusLabel(sale)
     ]);
-  return reportSection("Vendas recentes", ["Data", "Vendedor", "Tipo", "Cliente", "CondomÃ­nio", "Plano", "Valor", "Status"], rows);
+  return reportSection("Vendas recentes", ["Data", "Vendedor", "Tipo", "Cliente", "Condomínio", "Plano", "Valor", "Status"], rows);
 }
 
 function reportSalesStatusSection() {
@@ -3377,7 +3374,7 @@ function reportRelationshipSection() {
     .sort((a, b) => String(a.nextVisit || a.date || "").localeCompare(String(b.nextVisit || b.date || "")))
     .slice(0, 10)
     .map((visit) => [findById("condos", visit.condoId)?.name || visit.condoName || "-", visit.status || "-", visit.relationship || "-", fmtDate(visit.nextVisit || visit.date)]);
-  return reportSection("Relacionamento prioritÃ¡rio", ["CondomÃ­nio", "Status", "RelaÃ§Ã£o", "PrÃ³xima visita"], rows);
+  return reportSection("Relacionamento prioritário", ["Condomínio", "Status", "Relação", "Próxima visita"], rows);
 }
 
 function reportUpcomingVisitsSection() {
@@ -3385,7 +3382,7 @@ function reportUpcomingVisitsSection() {
     .filter((event) => event.type === "visits")
     .slice(0, 12)
     .map((event) => [fmtDateTime(event.date), event.title, event.status || "-", event.location || "-"]);
-  return reportSection("PrÃ³ximas visitas", ["Data", "Atividade", "Status", "Local"], rows);
+  return reportSection("Próximas visitas", ["Data", "Atividade", "Status", "Local"], rows);
 }
 
 function reportCondoPrioritySection() {
@@ -3394,20 +3391,20 @@ function reportCondoPrioritySection() {
     .map((condo) => ({ condo, last: latest.get(condo.id), days: daysSince(latest.get(condo.id)?.date) }))
     .sort((a, b) => b.days - a.days)
     .slice(0, 12)
-    .map(({ condo, last, days }) => [condo.name || "-", condo.city || "-", condo.neighborhood || "-", last ? fmtDate(last.date) : "Nunca", days >= 9999 ? "Sem histÃ³rico" : `${days} dia(s)`, condo.status || "Ativo"]);
-  return reportSection("CondomÃ­nios sem visita recente", ["CondomÃ­nio", "Cidade", "Bairro", "Ãšltima visita", "Tempo", "Status"], rows);
+    .map(({ condo, last, days }) => [condo.name || "-", condo.city || "-", condo.neighborhood || "-", last ? fmtDate(last.date) : "Nunca", days >= 9999 ? "Sem histórico" : `${days} dia(s)`, condo.status || "Ativo"]);
+  return reportSection("Condomínios sem visita recente", ["Condomínio", "Cidade", "Bairro", "Última visita", "Tempo", "Status"], rows);
 }
 
 function reportExpansionSection() {
   const rows = state.data.expansions
-    .filter((item) => !["ConcluÃ­do", "Reprovado"].includes(item.status))
+    .filter((item) => !["Concluído", "Reprovado"].includes(item.status))
     .slice(0, 10)
     .map((item) => [item.condoName || "-", item.type || "-", item.status || "-", fmtDate(item.expectedDate || item.date)]);
-  return reportSection("ExpansÃ£o em acompanhamento", ["CondomÃ­nio", "Tipo", "Status", "PrevisÃ£o"], rows);
+  return reportSection("Expansão em acompanhamento", ["Condomínio", "Tipo", "Status", "Previsão"], rows);
 }
 
 function reportExpansionStatusSection() {
-  return reportSection("ExpansÃ£o por status", ["Status", "Quantidade"], counts(state.data.expansions, "status").map((row) => [row.label, row.value]));
+  return reportSection("Expansão por status", ["Status", "Quantidade"], counts(state.data.expansions, "status").map((row) => [row.label, row.value]));
 }
 
 function reportScheduleByDaySection() {
@@ -3415,9 +3412,9 @@ function reportScheduleByDaySection() {
     .slice(0, 14)
     .map((item) => {
       const condo = findById("condos", item.condoId);
-      return [fmtDate(item.date), `${item.startTime || "-"} Ã s ${item.endTime || "-"}`, condo?.name || item.condoName || "-", scheduleSellers(item) || "-", item.accessMode || "-", item.status || "Programada"];
+      return [fmtDate(item.date), `${item.startTime || "-"} às ${item.endTime || "-"}`, condo?.name || item.condoName || "-", scheduleSellers(item) || "-", item.accessMode || "-", item.status || "Programada"];
     });
-  return reportSection("ProgramaÃ§Ã£o por dia", ["Data", "HorÃ¡rio", "CondomÃ­nio", "Consultor(es)", "AtuaÃ§Ã£o", "Status"], rows);
+  return reportSection("Programação por dia", ["Data", "Horário", "Condomínio", "Consultor(es)", "Atuação", "Status"], rows);
 }
 
 function reportScheduleConsultantsSection() {
@@ -3426,21 +3423,21 @@ function reportScheduleConsultantsSection() {
     scheduleSellerNames(item).forEach((seller) => {
       const current = map.get(seller) || { routes: 0, condos: new Set() };
       current.routes += 1;
-      current.condos.add(findById("condos", item.condoId)?.name || item.condoName || "Sem condomÃ­nio");
+      current.condos.add(findById("condos", item.condoId)?.name || item.condoName || "Sem condomínio");
       map.set(seller, current);
     });
   });
   const rows = [...map.entries()]
     .sort((a, b) => b[1].routes - a[1].routes)
     .map(([seller, info]) => [seller, info.routes, [...info.condos].slice(0, 4).join(", ")]);
-  return reportSection("Consultores na programaÃ§Ã£o", ["Consultor", "Rotas", "CondomÃ­nios"], rows);
+  return reportSection("Consultores na programação", ["Consultor", "Rotas", "Condomínios"], rows);
 }
 
 function reportCondoMasterSection() {
   const rows = state.data.condos
     .slice(0, 14)
     .map((condo) => [condo.name || "-", condo.city || "-", condo.neighborhood || "-", condo.managerCompany || "-", condo.capacity || "-", condo.status || "Ativo"]);
-  return reportSection("Cadastro mestre de condomÃ­nios", ["Nome", "Cidade", "Bairro", "Administradora", "Unidades", "Status"], rows);
+  return reportSection("Cadastro mestre de condomínios", ["Nome", "Cidade", "Bairro", "Administradora", "Unidades", "Status"], rows);
 }
 
 function reportPlansSection() {
@@ -3466,7 +3463,7 @@ function reportPlansByCitySection() {
 }
 
 function reportSection(title, headers, rows) {
-  const body = rows.length ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headers.length}">Sem registros essenciais para este relatÃ³rio.</td></tr>`;
+  const body = rows.length ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headers.length}">Sem registros essenciais para este relatório.</td></tr>`;
   return `<section class="report-section"><h2>${escapeHtml(title)}</h2><table><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></section>`;
 }
 
@@ -3479,7 +3476,7 @@ function downloadReportExcel() {
 function copyWeeklySchedule() {
   const period = schedulePeriodFromDate(state.scheduleWeekStart || todayISO());
   navigator.clipboard.writeText(buildWeeklyScheduleText({ period }))
-    .then(() => alert("ProgramaÃ§Ã£o copiada para enviar ao grupo."));
+    .then(() => alert("Programação copiada para enviar ao grupo."));
 }
 
 function downloadWeeklySchedule() {
@@ -3489,19 +3486,19 @@ function downloadWeeklySchedule() {
 function openScheduleDownloadModal() {
   const modal = $("#modalTemplate").content.firstElementChild.cloneNode(true);
   const period = schedulePeriodFromDate(state.scheduleWeekStart || todayISO());
-  modal.querySelector("h3").textContent = "Baixar programaÃ§Ã£o";
+  modal.querySelector("h3").textContent = "Baixar programação";
   modal.querySelector(".modal-body").innerHTML = `
     <div class="form-grid">
       <label>Data inicial<input name="from" type="date" value="${escapeHtml(period.from)}" required></label>
       <label>Data final<input name="to" type="date" value="${escapeHtml(period.to)}" required></label>
-      <p class="hint full">Escolha o perÃ­odo que deve sair no PDF. Consultores no mesmo condomÃ­nio, horÃ¡rio e endereÃ§o serÃ£o agrupados em uma rota.</p>
+      <p class="hint full">Escolha o período que deve sair no PDF. Consultores no mesmo condomínio, horário e endereço serão agrupados em uma rota.</p>
     </div>`;
   modal.querySelector("footer .primary").textContent = "Baixar PDF";
   modal.querySelectorAll(".close").forEach((button) => button.addEventListener("click", () => modal.remove()));
   modal.querySelector("form").addEventListener("submit", (event) => {
     event.preventDefault();
     const selected = normalizeSchedulePeriod(Object.fromEntries(new FormData(event.currentTarget)));
-    if (!selected) return alert("Informe um perÃ­odo vÃ¡lido para baixar a programaÃ§Ã£o.");
+    if (!selected) return alert("Informe um período válido para baixar a programação.");
     modal.remove();
     printWeeklySchedulePdf(selected);
   });
@@ -3510,8 +3507,8 @@ function openScheduleDownloadModal() {
 
 function printWeeklySchedulePdf(period = schedulePeriodFromDate(todayISO())) {
   const win = window.open("", "_blank", "width=1200,height=800");
-  if (!win) return alert("Permita pop-ups para gerar a programaÃ§Ã£o em PDF.");
-  win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>ProgramaÃ§Ã£o semanal</title>${schedulePrintStyles()}</head><body>${scheduleDocumentHtml(period)}</body></html>`);
+  if (!win) return alert("Permita pop-ups para gerar a programação em PDF.");
+  win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Programação semanal</title>${schedulePrintStyles()}</head><body>${scheduleDocumentHtml(period)}</body></html>`);
   win.document.close();
   win.focus();
   setTimeout(() => win.print(), 450);
@@ -3559,17 +3556,17 @@ function scheduleDocumentHtml(period = schedulePeriodFromDate(todayISO())) {
     <header class="schedule-head">
       <div class="use-logo-wrap"><img class="use-logo" src="${location.origin}/assets/use-logo.gif" alt="USE Telecom"></div>
       <div>
-        <h1>ProgramaÃ§Ã£o semanal da equipe</h1>
-        <div class="subtitle">Roteiro operacional para atuaÃ§Ã£o em condomÃ­nios</div>
+        <h1>Programação semanal da equipe</h1>
+        <div class="subtitle">Roteiro operacional para atuação em condomínios</div>
         <div class="period-pill">${escapeHtml(schedulePeriodLabel(period))}</div>
       </div>
       <div class="stamp">
         Gerado em ${fmtDateTime(new Date().toISOString())}<br>
-        Sistema de GestÃ£o Comercial<br>
-        ResponsÃ¡vel: ${escapeHtml(state.user?.name || "-")}
+        Sistema de Gestão Comercial<br>
+        Responsável: ${escapeHtml(state.user?.name || "-")}
       </div>
     </header>
-    ${rows.length ? scheduleAgendaGrid(rows) : `<section class="agenda-day"><header><strong>Sem programaÃ§Ã£o</strong></header><div class="empty-agenda">Nenhuma programaÃ§Ã£o cadastrada para exportar.</div></section>`}
+    ${rows.length ? scheduleAgendaGrid(rows) : `<section class="agenda-day"><header><strong>Sem programação</strong></header><div class="empty-agenda">Nenhuma programação cadastrada para exportar.</div></section>`}
   </main>`;
 }
 
@@ -3645,14 +3642,14 @@ function scheduleAgendaCard(item) {
   return `<div class="agenda-card">
     <div class="agenda-time">
       <strong>${escapeHtml(item.startTime || "-")}</strong>
-      <span>atÃ© ${escapeHtml(item.endTime || "-")}</span>
+      <span>até ${escapeHtml(item.endTime || "-")}</span>
     </div>
     <div class="agenda-main">
       <p class="agenda-condo">${escapeHtml(condo?.name || item.condoName || "-")}</p>
       <p class="agenda-address">${escapeHtml(item.address || condo?.address || "-")}</p>
       <div class="agenda-meta">
-        <span>${escapeHtml(item.accessMode || "AtuaÃ§Ã£o")}</span>
-        <span>${escapeHtml(item.workArea || "Ãrea geral")}</span>
+        <span>${escapeHtml(item.accessMode || "Atuação")}</span>
+        <span>${escapeHtml(item.workArea || "Área geral")}</span>
         <span>${escapeHtml(item.status || "Programada")}</span>
       </div>
     </div>
@@ -3690,7 +3687,7 @@ function scheduleSellerBlock(seller, rows) {
     <h3 class="seller-title">${escapeHtml(seller)}</h3>
     <table>
       <colgroup><col style="width:12%"><col style="width:20%"><col style="width:31%"><col style="width:13%"><col style="width:10%"><col style="width:14%"></colgroup>
-      <thead><tr><th>HorÃ¡rio</th><th>CondomÃ­nio</th><th>EndereÃ§o</th><th>AtuaÃ§Ã£o</th><th>Status</th><th>OrientaÃ§Ã£o</th></tr></thead>
+      <thead><tr><th>Horário</th><th>Condomínio</th><th>Endereço</th><th>Atuação</th><th>Status</th><th>Orientação</th></tr></thead>
       <tbody>${rows.map((item) => scheduleReportRow(item)).join("")}</tbody>
     </table>
   </div>`;
@@ -3731,10 +3728,10 @@ function knownSellerEmail(name) {
 function scheduleReportRow(item) {
   const condo = findById("condos", item.condoId);
   return `<tr>
-    <td>${escapeHtml(item.startTime || "-")} Ã s ${escapeHtml(item.endTime || "-")}</td>
+    <td>${escapeHtml(item.startTime || "-")} às ${escapeHtml(item.endTime || "-")}</td>
     <td>${escapeHtml(condo?.name || item.condoName || "-")}</td>
     <td>${escapeHtml(item.address || condo?.address || "-")}</td>
-    <td>${escapeHtml(item.accessMode || "-")}<br><span class="badge">${escapeHtml(item.workArea || "Ãrea geral")}</span></td>
+    <td>${escapeHtml(item.accessMode || "-")}<br><span class="badge">${escapeHtml(item.workArea || "Área geral")}</span></td>
     <td>${escapeHtml(item.status || "Programada")}</td>
     <td>${escapeHtml(item.notes || "-")}</td>
   </tr>`;
@@ -3743,26 +3740,26 @@ function scheduleReportRow(item) {
 function buildWeeklyScheduleText(options = {}) {
   const rows = options.rows || weeklyScheduleRowsForReport(options.period || {});
   const lines = [
-    "WS Consultoria - ProgramaÃ§Ã£o semanal da equipe",
+    "WS Consultoria - Programação semanal da equipe",
     options.period ? schedulePeriodLabel(options.period) : "",
     `Gerado em: ${fmtDateTime(new Date().toISOString())}`,
     ""
   ];
   if (!rows.length) {
-    lines.push("Nenhuma programaÃ§Ã£o cadastrada.");
+    lines.push("Nenhuma programação cadastrada.");
     return lines.join("\n");
   }
   rows.forEach((item, index) => {
     const condo = findById("condos", item.condoId);
     const info = condoScheduleInfo(item.condoId, item.date);
     lines.push(
-      `${index + 1}. ${fmtDate(item.date)} | ${item.startTime || "-"} Ã s ${item.endTime || "-"}`,
-      `ResponsÃ¡veis: ${scheduleSellers(item) || "-"}`,
-      `CondomÃ­nio: ${condo?.name || item.condoName || "-"}`,
-      `EndereÃ§o: ${item.address || condo?.address || "-"}`,
-      `AtuaÃ§Ã£o: ${item.accessMode || "-"} | Ãrea: ${item.workArea || "-"} | Status: ${item.status || "Programada"}`,
+      `${index + 1}. ${fmtDate(item.date)} | ${item.startTime || "-"} às ${item.endTime || "-"}`,
+      `Responsáveis: ${scheduleSellers(item) || "-"}`,
+      `Condomínio: ${condo?.name || item.condoName || "-"}`,
+      `Endereço: ${item.address || condo?.address || "-"}`,
+      `Atuação: ${item.accessMode || "-"} | Área: ${item.workArea || "-"} | Status: ${item.status || "Programada"}`,
       `Retorno: ${info.title} - ${info.detail}`,
-      item.notes ? `OrientaÃ§Ã£o: ${item.notes}` : "",
+      item.notes ? `Orientação: ${item.notes}` : "",
       ""
     );
   });
@@ -3771,7 +3768,7 @@ function buildWeeklyScheduleText(options = {}) {
 
 function copyLogs() {
   const content = filtered("activities").map((item) => `${fmtDateTime(item.date)} | ${item.user || "-"} | ${item.action || "-"} | ${item.details || "-"}`).join("\n");
-  navigator.clipboard.writeText(content || "Sem histÃ³rico para copiar.");
+  navigator.clipboard.writeText(content || "Sem histórico para copiar.");
 }
 
 function download(blob, filename) {
@@ -3787,39 +3784,39 @@ function buildReport() {
   const filter = state.reportFilter;
   const rows = reportExportRows(filter).slice(1);
   const lines = [
-    "Sistema de GestÃ£o Comercial - RelatÃ³rio",
+    "Sistema de Gestão Comercial - Relatório",
     `Atividade: ${reportLabel(filter)}`,
     `Gerado em: ${fmtDateTime(new Date().toISOString())}`,
     ""
   ];
-  if (!rows.length) lines.push("Nenhuma informaÃ§Ã£o selecionada.");
+  if (!rows.length) lines.push("Nenhuma informação selecionada.");
   rows.forEach((row) => lines.push(row.filter((cell) => cell !== undefined && cell !== "").join(" | ")));
   return lines.join("\n");
 }
 
 function reportExportRows(filter = state.reportFilter) {
   const selected = selectedReportOptions(filter);
-  const rows = [["Ãrea", "Bloco", "Campo 1", "Campo 2", "Campo 3", "Campo 4", "Campo 5", "Campo 6", "Campo 7"]];
+  const rows = [["Área", "Bloco", "Campo 1", "Campo 2", "Campo 3", "Campo 4", "Campo 5", "Campo 6", "Campo 7"]];
   const push = (block, dataRows) => dataRows.forEach((row) => rows.push([reportLabel(filter), block, ...row]));
   const visibleSales = visibleSalesRows();
   if (selected.has("metrics")) push("Indicadores", reportMetricRows(filter));
   if (selected.has("salesRanking")) push("Ranking comercial", sellerRanking().slice(0, 12).map((row) => [row.name, row.count, money(row.value), `${row.conversion}%`]));
   if (selected.has("latestSales")) push("Vendas recentes", [...visibleSales].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 20).map((sale) => [fmtDate(sale.date), saleSellerName(sale) || "-", saleTypeLabel(sale), sale.customer || "-", findById("condos", sale.condoId)?.name || sale.condoName || "-", money(sale.value), saleStatusLabel(sale)]));
   if (selected.has("salesStatus")) push("Status das vendas", counts(visibleSales.map((sale) => ({ status: saleStatusLabel(sale) })), "status").map((row) => [row.label, row.value]));
-  if (selected.has("relationships")) push("Relacionamento prioritÃ¡rio", state.data.visits.filter((visit) => !["Finalizado", "Visitado"].includes(visit.status)).slice(0, 20).map((visit) => [findById("condos", visit.condoId)?.name || visit.condoName || "-", visit.status || "-", visit.relationship || "-", fmtDate(visit.nextVisit || visit.date)]));
-  if (selected.has("upcomingVisits")) push("PrÃ³ximas visitas", upcomingEvents().filter((event) => event.type === "visits").slice(0, 20).map((event) => [fmtDateTime(event.date), event.title, event.status || "-", event.location || "-"]));
+  if (selected.has("relationships")) push("Relacionamento prioritário", state.data.visits.filter((visit) => !["Finalizado", "Visitado"].includes(visit.status)).slice(0, 20).map((visit) => [findById("condos", visit.condoId)?.name || visit.condoName || "-", visit.status || "-", visit.relationship || "-", fmtDate(visit.nextVisit || visit.date)]));
+  if (selected.has("upcomingVisits")) push("Próximas visitas", upcomingEvents().filter((event) => event.type === "visits").slice(0, 20).map((event) => [fmtDateTime(event.date), event.title, event.status || "-", event.location || "-"]));
   if (selected.has("condoPriorities")) {
     const latest = latestVisitByCondo();
-    push("CondomÃ­nios sem visita", state.data.condos.map((condo) => ({ condo, last: latest.get(condo.id), days: daysSince(latest.get(condo.id)?.date) })).sort((a, b) => b.days - a.days).slice(0, 20).map(({ condo, last, days }) => [condo.name || "-", condo.city || "-", condo.neighborhood || "-", last ? fmtDate(last.date) : "Nunca", days >= 9999 ? "Sem histÃ³rico" : `${days} dia(s)`]));
+    push("Condomínios sem visita", state.data.condos.map((condo) => ({ condo, last: latest.get(condo.id), days: daysSince(latest.get(condo.id)?.date) })).sort((a, b) => b.days - a.days).slice(0, 20).map(({ condo, last, days }) => [condo.name || "-", condo.city || "-", condo.neighborhood || "-", last ? fmtDate(last.date) : "Nunca", days >= 9999 ? "Sem histórico" : `${days} dia(s)`]));
   }
-  if (selected.has("scheduleByDay")) push("ProgramaÃ§Ã£o por dia", weeklyScheduleRowsForReport().slice(0, 24).map((item) => [fmtDate(item.date), `${item.startTime || "-"} Ã s ${item.endTime || "-"}`, findById("condos", item.condoId)?.name || item.condoName || "-", scheduleSellers(item) || "-", item.accessMode || "-", item.status || "Programada"]));
+  if (selected.has("scheduleByDay")) push("Programação por dia", weeklyScheduleRowsForReport().slice(0, 24).map((item) => [fmtDate(item.date), `${item.startTime || "-"} às ${item.endTime || "-"}`, findById("condos", item.condoId)?.name || item.condoName || "-", scheduleSellers(item) || "-", item.accessMode || "-", item.status || "Programada"]));
   if (selected.has("scheduleConsultants")) {
     const map = new Map();
     weeklyScheduleRowsForReport().forEach((item) => scheduleSellerNames(item).forEach((seller) => map.set(seller, (map.get(seller) || 0) + 1)));
-    push("Consultores na programaÃ§Ã£o", [...map.entries()].sort((a, b) => b[1] - a[1]).map(([seller, routes]) => [seller, routes]));
+    push("Consultores na programação", [...map.entries()].sort((a, b) => b[1] - a[1]).map(([seller, routes]) => [seller, routes]));
   }
-  if (selected.has("expansion")) push("ExpansÃ£o em acompanhamento", state.data.expansions.filter((item) => !["ConcluÃ­do", "Reprovado"].includes(item.status)).slice(0, 20).map((item) => [item.condoName || "-", item.type || "-", item.status || "-", fmtDate(item.expectedDate || item.date)]));
-  if (selected.has("expansionStatus")) push("ExpansÃ£o por status", counts(state.data.expansions, "status").map((row) => [row.label, row.value]));
+  if (selected.has("expansion")) push("Expansão em acompanhamento", state.data.expansions.filter((item) => !["Concluído", "Reprovado"].includes(item.status)).slice(0, 20).map((item) => [item.condoName || "-", item.type || "-", item.status || "-", fmtDate(item.expectedDate || item.date)]));
+  if (selected.has("expansionStatus")) push("Expansão por status", counts(state.data.expansions, "status").map((row) => [row.label, row.value]));
   if (selected.has("condoMaster")) push("Cadastro mestre", state.data.condos.slice(0, 24).map((condo) => [condo.name || "-", condo.city || "-", condo.neighborhood || "-", condo.managerCompany || "-", condo.capacity || "-", condo.status || "Ativo"]));
   if (selected.has("plans")) push("Planos ativos", state.data.plans.filter((plan) => plan.status !== "Inativo").slice(0, 24).map((plan) => [plan.city || "-", plan.name || "-", plan.speed || "-", money(plan.price)]));
   if (selected.has("plansByCity")) {
@@ -3848,7 +3845,7 @@ function reportCards() {
 
 function barChart(title, rows) {
   const max = Math.max(1, ...rows.map((row) => Number(row.value || 0)));
-  return `<h3>${title}</h3><div class="bars">${rows.length ? rows.map((row) => `<div class="bar-row"><span>${escapeHtml(row.label || "-")}</span><div><i style="width:${Math.max(4, (Number(row.value || 0) / max) * 100)}%"></i></div><strong>${row.value}</strong></div>`).join("") : `<div class="empty">Sem dados para grÃ¡fico.</div>`}</div>`;
+  return `<h3>${title}</h3><div class="bars">${rows.length ? rows.map((row) => `<div class="bar-row"><span>${escapeHtml(row.label || "-")}</span><div><i style="width:${Math.max(4, (Number(row.value || 0) / max) * 100)}%"></i></div><strong>${row.value}</strong></div>`).join("") : `<div class="empty">Sem dados para gráfico.</div>`}</div>`;
 }
 
 function counts(rows, key) {
@@ -3972,11 +3969,11 @@ function findById(collection, id) {
 }
 
 function labelFor(collection) {
-  return { condos: "condomÃ­nio", weeklySchedules: "programaÃ§Ã£o", visits: "relacionamento", expansions: "demanda de expansÃ£o", sellers: "vendedor", sales: "venda", plans: "plano", users: "acesso" }[collection] || collection;
+  return { condos: "condomínio", weeklySchedules: "programação", visits: "relacionamento", expansions: "demanda de expansão", sellers: "vendedor", sales: "venda", plans: "plano", users: "acesso" }[collection] || collection;
 }
 
 function reportLabel(value) {
-  return { geral: "Geral", vendas: "Vendas", visitas: "Relacionamento", programacao: "ProgramaÃ§Ã£o", expansao: "ExpansÃ£o", condominios: "CondomÃ­nios", planos: "Planos" }[value] || value;
+  return { geral: "Geral", vendas: "Vendas", visitas: "Relacionamento", programacao: "Programação", expansao: "Expansão", condominios: "Condomínios", planos: "Planos" }[value] || value;
 }
 
 function pageLabel(page) {
@@ -3988,11 +3985,11 @@ function relationshipStatuses() {
 }
 
 function expansionStatuses() {
-  return ["Em anÃ¡lise", "Agendado", "Em vistoria", "Em inspeÃ§Ã£o", "Aguardando aprovaÃ§Ã£o", "Aprovado", "Reprovado", "Em implantaÃ§Ã£o", "ConcluÃ­do"];
+  return ["Em análise", "Agendado", "Em vistoria", "Em inspeção", "Aguardando aprovação", "Aprovado", "Reprovado", "Em implantação", "Concluído"];
 }
 
 function agendaStatuses() {
-  return [...new Set([...relationshipStatuses(), ...expansionStatuses(), "Programada", "Confirmada", "Em andamento", "ConcluÃ­da", "Cancelada"].filter(Boolean))];
+  return [...new Set([...relationshipStatuses(), ...expansionStatuses(), "Programada", "Confirmada", "Em andamento", "Concluída", "Cancelada"].filter(Boolean))];
 }
 
 function gcalDate(date) {
