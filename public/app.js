@@ -1293,11 +1293,25 @@ function status(label, tone = "") {
   return `<span class="status ${tone || warn}">${escapeHtml(label || "-")}</span>`;
 }
 
+function actionMenu(items, label = "Ações") {
+  const visibleItems = items.filter(Boolean);
+  if (!visibleItems.length) return "";
+  return `<details class="action-menu">
+    <summary>${escapeHtml(label)} <span aria-hidden="true">▾</span></summary>
+    <div class="action-menu-panel">
+      ${visibleItems.join("")}
+    </div>
+  </details>`;
+}
+
 function actions(collection, id, calendar = false) {
   return `<div class="row-actions">
-    ${calendar ? `<button class="secondary" data-calendar="${collection}:${id}">Agenda</button><button class="secondary" data-email="${collection}:${id}">Email</button>` : ""}
-    <button class="secondary" data-edit="${collection}:${id}">Editar</button>
-    <button class="danger" data-delete="${collection}:${id}">Excluir</button>
+    ${actionMenu([
+      calendar ? `<button class="secondary" data-calendar="${collection}:${id}">Agenda</button>` : "",
+      calendar ? `<button class="secondary" data-email="${collection}:${id}">E-mail</button>` : "",
+      `<button class="secondary" data-edit="${collection}:${id}">Editar</button>`,
+      `<button class="danger" data-delete="${collection}:${id}">Excluir</button>`
+    ])}
   </div>`;
 }
 
@@ -1306,9 +1320,11 @@ function userActions(user) {
   const nextActive = user.active ? "false" : "true";
   const self = state.user?.id === user.id;
   return `<div class="row-actions">
-    <button class="secondary" data-toggle-user="${user.id}:${nextActive}" ${self ? "disabled" : ""}>${toggleLabel}</button>
-    <button class="secondary" data-edit="users:${user.id}">Editar</button>
-    <button class="danger" data-delete="users:${user.id}" ${self ? "disabled" : ""}>Excluir</button>
+    ${actionMenu([
+      `<button class="secondary" data-toggle-user="${user.id}:${nextActive}" ${self ? "disabled" : ""}>${toggleLabel}</button>`,
+      `<button class="secondary" data-edit="users:${user.id}">Editar</button>`,
+      `<button class="danger" data-delete="users:${user.id}" ${self ? "disabled" : ""}>Excluir</button>`
+    ])}
   </div>`;
 }
 
@@ -1737,11 +1753,13 @@ function scheduleCard(item) {
     <p>${escapeHtml(info.title)}</p>
     ${item.calendarInviteStatus ? `<p class="schedule-invite-status">${escapeHtml(item.calendarInviteStatus)}</p>` : ""}
     <div class="row-actions">
-      <button class="secondary" data-edit="weeklySchedules:${item.id}">Editar</button>
-      <button class="secondary" data-email="weeklySchedules:${item.id}">Enviar equipe</button>
-      <button class="secondary" data-send-calendar-invite="${item.id}">Agenda Google</button>
-      <button class="secondary" data-map="${escapeHtml(item.address || condo?.address || "")}">Mapa</button>
-      <button class="danger" data-delete="weeklySchedules:${item.id}">Excluir</button>
+      ${actionMenu([
+        `<button class="secondary" data-edit="weeklySchedules:${item.id}">Editar</button>`,
+        `<button class="secondary" data-email="weeklySchedules:${item.id}">Enviar equipe</button>`,
+        `<button class="secondary" data-send-calendar-invite="${item.id}">Agenda Google</button>`,
+        `<button class="secondary" data-map="${escapeHtml(item.address || condo?.address || "")}">Mapa</button>`,
+        `<button class="danger" data-delete="weeklySchedules:${item.id}">Excluir</button>`
+      ])}
     </div>
   </article>`;
 }
@@ -1844,8 +1862,10 @@ function historyMovementCell(row) {
 
 function historyRowActions(row) {
   return `<div class="row-actions">
-    <button class="primary" data-schedule-condo="${escapeHtml(row.condoId)}">Programar</button>
-    ${row.address ? `<button class="secondary" data-map="${escapeHtml(row.address)}">Mapa</button>` : ""}
+    ${actionMenu([
+      `<button class="primary" data-schedule-condo="${escapeHtml(row.condoId)}">Programar</button>`,
+      row.address ? `<button class="secondary" data-map="${escapeHtml(row.address)}">Mapa</button>` : ""
+    ])}
   </div>`;
 }
 
