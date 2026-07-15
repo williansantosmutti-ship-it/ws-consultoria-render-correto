@@ -1735,6 +1735,10 @@ function actionMenu(items, label = "Ações") {
   </details>`;
 }
 
+function closeActionMenus() {
+  document.querySelectorAll('.action-menu[open]').forEach((menu) => menu.removeAttribute('open'));
+}
+
 function actions(collection, id, calendar = false) {
   return `<div class="row-actions">
     ${actionMenu([
@@ -2166,6 +2170,7 @@ function formFields(collection, item = {}) {
 }
 
 function openForm(collection, item = {}) {
+  closeActionMenus();
   const modal = $("#modalTemplate").content.firstElementChild.cloneNode(true);
   modal.querySelector("h3").textContent = `${item.id ? "Editar" : "Novo"} ${labelFor(collection)}`;
   modal.querySelector(".modal-body").innerHTML = `<div class="form-grid">${formFields(collection, item).join("")}</div><p class="modal-message" data-modal-message></p>`;
@@ -3480,6 +3485,7 @@ function openWeeklyScheduleEmail(ref) {
 }
 
 function openShareEmailModal({ to, subject, body, rows = [], period = null }) {
+  closeActionMenus();
   const modal = $("#modalTemplate").content.firstElementChild.cloneNode(true);
   modal.querySelector("h3").textContent = "Enviar equipe";
   modal.querySelector(".modal-body").innerHTML = `
@@ -4239,6 +4245,7 @@ function downloadWeeklySchedule() {
 }
 
 function openScheduleDownloadModal() {
+  closeActionMenus();
   const modal = $("#modalTemplate").content.firstElementChild.cloneNode(true);
   const period = schedulePeriodFromDate(state.scheduleWeekStart || todayISO());
   modal.querySelector("h3").textContent = "Baixar programação";

@@ -1669,7 +1669,7 @@ body[data-theme="dark"] .history-card.danger span { background: #3b1614; color: 
   display: grid;
   place-items: center;
   padding: 18px;
-  z-index: 20;
+  z-index: 1000;
 }
 .modal {
   width: min(820px, 100%);
@@ -1679,6 +1679,8 @@ body[data-theme="dark"] .history-card.danger span { background: #3b1614; color: 
   border-radius: 12px;
   border: 1px solid var(--line);
   box-shadow: 0 28px 90px rgba(0, 0, 0, .34);
+  position: relative;
+  z-index: 1001;
 }
 .modal header, .modal footer {
   display: flex;
