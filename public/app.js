@@ -2175,6 +2175,7 @@ function openForm(collection, item = {}) {
   modal.querySelector("h3").textContent = `${item.id ? "Editar" : "Novo"} ${labelFor(collection)}`;
   modal.querySelector(".modal-body").innerHTML = `<div class="form-grid">${formFields(collection, item).join("")}</div><p class="modal-message" data-modal-message></p>`;
   bindSearchableSelects(modal);
+  hydrateCondoFields(modal, collection);
   modal.querySelectorAll(".close").forEach((button) => button.addEventListener("click", () => modal.remove()));
   if (collection === "weeklySchedules") hydrateScheduleForm(modal);
   modal.querySelector("form").addEventListener("submit", async (event) => {
@@ -2293,7 +2294,11 @@ function bindSearchableSelects(root = document) {
       optionsBox.classList.toggle("open", Boolean(query) || document.activeElement === input);
     };
     input.addEventListener("focus", applyFilter);
-    input.addEventListener("input", applyFilter);
+    input.addEventListener("input", () => {
+      hidden.value = "";
+      hidden.dispatchEvent(new Event("change", { bubbles: true }));
+      applyFilter();
+    });
     input.addEventListener("keydown", (event) => {
       if (event.key === "Escape") optionsBox.classList.remove("open");
       if (event.key !== "Enter") return;
@@ -2307,6 +2312,34 @@ function bindSearchableSelects(root = document) {
       if (!wrapper.contains(event.target)) optionsBox.classList.remove("open");
     });
   });
+}
+
+function hydrateCondoFields(modal, collection) {
+  const condoField = modal.querySelector("[name='condoId']");
+  if (!condoField) return;
+  const setValue = (name, value, force = false) => {
+    const field = modal.querySelector(`[name='${name}']`);
+    if (field && (force || !field.value)) field.value = value || "";
+  };
+  const fill = (force = false) => {
+    const condo = findById("condos", condoField.value);
+    if (!condo) return;
+    if (collection === "weeklySchedules") {
+      setValue("address", condo.address, force);
+    }
+    if (collection === "visits") {
+      setValue("syndic", condo.contactName, force);
+      setValue("managerCompany", condo.managerCompany, force);
+    }
+    if (collection === "expansions") {
+      setValue("condoName", condo.name, force);
+      setValue("address", condo.address, force);
+      setValue("city", condo.city, force);
+      setValue("neighborhood", condo.neighborhood, force);
+    }
+  };
+  condoField.addEventListener("change", () => fill(true));
+  fill(false);
 }
 
 function searchKey(value) {
@@ -2333,14 +2366,14 @@ function hydrateScheduleForm(modal) {
   const dateInput = modal.querySelector("input[name='date']");
   const addressInput = modal.querySelector("input[name='address']");
   const helper = modal.querySelector("[data-schedule-helper]");
-  const update = () => {
+  const update = (force = false) => {
     const condo = findById("condos", condoSelect?.value);
-    if (addressInput && condo?.address) addressInput.value = condo.address;
+    if (addressInput && condo?.address && (force || !addressInput.value)) addressInput.value = condo.address;
     if (helper) helper.innerHTML = scheduleHelperHtml(condoSelect?.value, dateInput?.value);
   };
-  condoSelect?.addEventListener("change", update);
-  dateInput?.addEventListener("change", update);
-  update();
+  condoSelect?.addEventListener("change", () => update(true));
+  dateInput?.addEventListener("change", () => update(false));
+  update(false);
 }
 
 function scheduleHelperHtml(condoId, date = todayISO()) {

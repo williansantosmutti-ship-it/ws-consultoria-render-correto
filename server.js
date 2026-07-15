@@ -37,6 +37,18 @@ let nodemailerModule = null;
 
 const sessions = new Map();
 
+function storageInfo() {
+  const usingExplicitPath = Boolean(process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH);
+  const usingRenderDisk = path.resolve(DATA_DIR) === path.resolve("/var/data");
+  const persistent = usingExplicitPath || usingRenderDisk;
+  return {
+    dataDir: DATA_DIR,
+    storeFile: STORE_FILE,
+    persistent,
+    warning: persistent ? "" : "Sem disco persistente configurado. Dados gravados neste arquivo podem voltar ao padrao apos deploy ou reinicio do Render."
+  };
+}
+
 function loadEnv() {
   const file = path.join(__dirname, ".env");
   if (!fs.existsSync(file)) return;
@@ -844,7 +856,7 @@ async function api(req, res) {
   const method = req.method;
 
   if (url.pathname === "/api/health") {
-    return send(res, 200, { ok: true, name: "WS CONSULTORIA", time: new Date().toISOString(), dataDir: DATA_DIR });
+    return send(res, 200, { ok: true, name: "WS CONSULTORIA", time: new Date().toISOString(), storage: storageInfo() });
   }
 
   if (url.pathname === "/api/login" && method === "POST") {
