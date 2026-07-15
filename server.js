@@ -30,7 +30,7 @@ const ALLOWED_SALES_SELLERS = new Map([
   ["BRUNA", "BRUNA"],
   ["ADRIELE", "ADRIELE"]
 ]);
-const LOCAL_RESTORE_COLLECTIONS = ["sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "deletedRefs"];
+const LOCAL_RESTORE_COLLECTIONS = ["sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "roadAreas", "commercialActions", "actionResults", "materials", "marketingRequests", "internalDemands", "pendingItems", "goals", "deletedRefs"];
 const loginAttempts = new Map();
 let salesImportRunning = false;
 let nodemailerModule = null;
@@ -109,6 +109,14 @@ function defaultStore() {
     plans: [],
     expansions: [],
     weeklySchedules: [],
+    roadAreas: [],
+    commercialActions: [],
+    actionResults: [],
+    materials: [],
+    marketingRequests: [],
+    internalDemands: [],
+    pendingItems: [],
+    goals: [],
     sales: [],
     activities: [],
     deletedRefs: []
@@ -324,7 +332,7 @@ function addActivity(db, user, action, details) {
 
 function collectionName(pathname) {
   const name = pathname.split("/")[2];
-  return ["settings", "users", "sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "sales", "activities"].includes(name) ? name : null;
+  return ["settings", "users", "sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "roadAreas", "commercialActions", "actionResults", "materials", "marketingRequests", "internalDemands", "pendingItems", "goals", "sales", "activities"].includes(name) ? name : null;
 }
 
 function ensureShape(db) {
@@ -348,7 +356,7 @@ function ensureShape(db) {
     ...db.settings
   };
   if (!db.settings.salesSheetUrl || db.settings.salesSheetUrl === OLD_SALES_SHEET_URL) db.settings.salesSheetUrl = DEFAULT_SALES_SHEET_URL;
-  for (const key of ["users", "sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "sales", "activities", "deletedRefs"]) {
+  for (const key of ["users", "sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "roadAreas", "commercialActions", "actionResults", "materials", "marketingRequests", "internalDemands", "pendingItems", "goals", "sales", "activities", "deletedRefs"]) {
     if (!Array.isArray(db[key])) db[key] = [];
   }
   return db;

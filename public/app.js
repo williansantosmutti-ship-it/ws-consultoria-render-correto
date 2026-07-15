@@ -1,4 +1,4 @@
-﻿const state = {
+const state = {
   user: null,
   settings: {},
   data: {},
@@ -31,7 +31,7 @@ const OLD_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1VUVzx5q_emU
 const DEFAULT_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1r1oF6e43liRkKVbIP8h-yf_L6K22fdyzu4g816gtAV8/edit?hl=pt-br&gid=1772567492#gid=1772567492";
 const SALES_AUTO_SYNC_MS = 600000;
 const LOCAL_SNAPSHOT_KEY = "ws-consultoria-local-snapshot-v2";
-const LOCAL_MIRROR_COLLECTIONS = ["sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "deletedRefs"];
+const LOCAL_MIRROR_COLLECTIONS = ["sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "roadAreas", "commercialActions", "actionResults", "materials", "marketingRequests", "internalDemands", "pendingItems", "goals", "deletedRefs"];
 const COMMERCIAL_SELLER_KEYS = new Set(["IVAN", "LUISE", "ISIS", "BRUNA", "ADRIELE"]);
 let salesAutoTimer = null;
 
@@ -49,10 +49,23 @@ const menu = [
     label: "Supervisão Comercial",
     items: [
       ["agenda", "Agenda"],
-      ["weeklySchedules", "Programação"],
+      ["weeklySchedules", "Programação semanal"],
+      ["commercialActions", "Ações comerciais"],
+      ["actionResults", "Realização das ações"],
       ["coverageMap", "Mapa"],
       ["visits", "Relacionamento com Condomínios"],
       ["expansions", "Expansão"]
+    ]
+  },
+  {
+    id: "operation",
+    label: "Operação Externa",
+    items: [
+      ["roadAreas", "Áreas de rua"],
+      ["materials", "Materiais comerciais"],
+      ["marketingRequests", "Solicitações ao marketing"],
+      ["internalDemands", "Demandas internas"],
+      ["pendingItems", "Pendências"]
     ]
   },
   {
@@ -60,7 +73,8 @@ const menu = [
     label: "Gestão Comercial",
     items: [
       ["sales", "Vendas"],
-      ["sellers", "Vendedores"],
+      ["sellers", "Equipe externa"],
+      ["goals", "Metas"],
       ["plans", "Planos"]
     ]
   },
@@ -184,7 +198,7 @@ function ensureClientShape(data) {
   const shaped = data || {};
   shaped.settings = { salesSheetUrl: DEFAULT_SALES_SHEET_URL, ...(shaped.settings || {}) };
   if (!shaped.settings.salesSheetUrl || shaped.settings.salesSheetUrl === OLD_SALES_SHEET_URL) shaped.settings.salesSheetUrl = DEFAULT_SALES_SHEET_URL;
-  for (const key of ["condos", "visits", "sellers", "sales", "plans", "expansions", "weeklySchedules", "activities", "users", "deletedRefs"]) {
+  for (const key of ["condos", "visits", "sellers", "sales", "plans", "expansions", "weeklySchedules", "roadAreas", "commercialActions", "actionResults", "materials", "marketingRequests", "internalDemands", "pendingItems", "goals", "activities", "users", "deletedRefs"]) {
     if (!Array.isArray(shaped[key])) shaped[key] = [];
   }
   return shaped;
@@ -295,7 +309,7 @@ function render() {
   applyTheme();
   renderReminderBadge();
   renderReminderDrawer();
-  const views = { dashboard, agenda, condos, weeklySchedules, coverageMap, visits, expansions, sellers, sales, plans, reports, backup, logs, users, settings };
+  const views = { dashboard, agenda, condos, weeklySchedules, coverageMap, visits, expansions, roadAreas, commercialActions, actionResults, materials, marketingRequests, internalDemands, pendingItems, goals, sellers, sales, plans, reports, backup, logs, users, settings };
   $("#content").innerHTML = views[state.page]();
   bindPageEvents();
 }
@@ -429,6 +443,8 @@ function dashboard() {
           ${segment("visitas", "Visitas", filter)}
           ${segment("expansao", "Expansão", filter)}
           ${segment("vistoria", "Vistoria", filter)}
+          ${segment("operacao", "Operação", filter)}
+          ${segment("gestao", "Gestão", filter)}
         </div>
       </div>
     </section>
@@ -440,6 +456,8 @@ function dashboardContent(filter) {
   if (filter === "visitas") return visitsDashboard("Visitas", (visit) => true);
   if (filter === "expansao") return expansionDashboard("Protocolos de implantação e ampliação", (item) => item.type !== "Vistoria");
   if (filter === "vistoria") return expansionDashboard("Vistorias", (item) => item.type === "Vistoria");
+  if (filter === "operacao") return externalOperationDashboard();
+  if (filter === "gestao") return managementCommandDashboard();
   return summaryDashboard();
 }
 
@@ -469,6 +487,7 @@ function summaryDashboard() {
       ${metric("Vendas do mês", salesMonth.length)}
       ${metric("Protocolos em aberto", openExpansions)}
     </div>
+    ${operationPulse()}
     ${smartRecommendations()}
     <div class="grid cols-2">
       <section class="card">
@@ -491,11 +510,17 @@ function smartRecommendations() {
   const stale60 = state.data.condos.filter((condo) => daysSince(latest.get(condo.id)?.date) > 60).length;
   const nextToday = upcomingEvents().filter((event) => String(event.date || "").slice(0, 10) === todayISO()).length;
   const expansionRisk = state.data.expansions.filter((item) => ["Em análise", "Aguardando aprovação", "Em vistoria", "Em inspeção"].includes(item.status)).length;
+  const materialRisk = state.data.materials.filter((item) => !materialAvailable(item)).length;
+  const demandRisk = state.data.internalDemands.filter((item) => isOverdue(item.nextCharge || item.requestedDeadline, item.status)).length;
+  const marketingRisk = state.data.marketingRequests.filter((item) => isOverdue(item.neededDate, item.status)).length;
   const sellerRows = sellerRanking();
   const leader = sellerRows[0];
   const suggestions = [
     stale60 ? { title: `${stale60} condomínios sem visita há mais de 60 dias`, note: "Priorize retorno em locais com potencial comercial alto.", action: "Ver histórico", page: "weeklySchedules" } : null,
     expansionRisk ? { title: `${expansionRisk} demandas de expansão pedem acompanhamento`, note: "Acompanhe aprovações e vistorias para evitar perda de prazo.", action: "Ver expansão", page: "expansions" } : null,
+    materialRisk ? { title: `${materialRisk} material(is) indisponível(is)`, note: "Verifique balcão, stand, panfletos e estrutura antes das próximas ações.", action: "Ver materiais", page: "materials" } : null,
+    demandRisk ? { title: `${demandRisk} demanda(s) interna(s) atrasada(s)`, note: "Cobranças pendentes podem travar ações, materiais ou liberação de condomínios.", action: "Ver demandas", page: "internalDemands" } : null,
+    marketingRisk ? { title: `${marketingRisk} solicitação(ões) de marketing atrasada(s)`, note: "Campanhas e cards precisam estar prontos antes da ação em campo.", action: "Ver marketing", page: "marketingRequests" } : null,
     leader ? { title: `${leader.name} lidera o mês com ${leader.count} venda(s)`, note: "Use o padrão do melhor desempenho para orientar a equipe.", action: "Ver vendedores", page: "sellers" } : null,
     nextToday ? { title: `${nextToday} atividade(s) ainda hoje`, note: "Confira programação e relacionamento antes de sair para campo.", action: "Ver agenda", page: "agenda" } : null
   ].filter(Boolean).slice(0, 4);
@@ -510,6 +535,78 @@ function smartRecommendations() {
       </article>`).join("")}
     </div>
   </section>`;
+}
+
+function operationPulse() {
+  const openActions = state.data.commercialActions.filter((item) => !closedStatuses().includes(item.status)).length;
+  const overdueMarketing = state.data.marketingRequests.filter((item) => isOverdue(item.neededDate, item.status)).length;
+  const overdueDemands = state.data.internalDemands.filter((item) => isOverdue(item.nextCharge || item.requestedDeadline, item.status)).length;
+  const unavailableMaterials = state.data.materials.filter((item) => !materialAvailable(item)).length;
+  const pending = state.data.pendingItems.filter((item) => !closedStatuses().includes(item.status)).length;
+  if (!openActions && !overdueMarketing && !overdueDemands && !unavailableMaterials && !pending) return "";
+  return `<section class="card command-strip">
+    <div class="section-head"><h3>Central de comando da operação externa</h3><small>Alertas rápidos do gestor</small></div>
+    <div class="grid cols-5">
+      ${metric("Ações abertas", openActions)}
+      ${metric("Pendências", pending)}
+      ${metric("Marketing atrasado", overdueMarketing)}
+      ${metric("Demandas atrasadas", overdueDemands)}
+      ${metric("Materiais indisponíveis", unavailableMaterials)}
+    </div>
+  </section>`;
+}
+
+function externalOperationDashboard() {
+  const month = new Date().toISOString().slice(0, 7);
+  const actions = state.data.commercialActions.filter((item) => String(item.startDate || item.date || "").startsWith(month));
+  const results = state.data.actionResults.filter((item) => String(item.date || "").startsWith(month));
+  const workedCondos = new Set([...actions, ...results].map((item) => item.condoId).filter(Boolean)).size;
+  return `
+    <div class="grid cols-5">
+      ${metric("Ações no mês", actions.length)}
+      ${metric("Realizações registradas", results.length)}
+      ${metric("Condomínios trabalhados", workedCondos)}
+      ${metric("Áreas de rua", state.data.roadAreas.length)}
+      ${metric("Vendas identificadas", results.reduce((sum, item) => sum + Number(item.salesIdentified || 0), 0))}
+    </div>
+    <div class="grid cols-2">
+      <section class="card">${barChart("Ações por tipo", counts(actions, "type"))}</section>
+      <section class="card">${barChart("Resultados por movimento", counts(results, "movement"))}</section>
+    </div>
+    <section class="card">
+      <div class="section-head"><h3>Próximas ações comerciais</h3><button class="primary" data-new="commercialActions">Nova ação</button></div>
+      ${table(["Período", "Ação", "Local", "Status"], state.data.commercialActions.slice(0, 12).map((item) => [fmtDate(item.startDate || item.date), item.name || "-", actionLocation(item), status(item.status || "Planejada")]))}
+    </section>`;
+}
+
+function managementCommandDashboard() {
+  const lateMarketing = state.data.marketingRequests.filter((item) => isOverdue(item.neededDate, item.status));
+  const lateDemands = state.data.internalDemands.filter((item) => isOverdue(item.nextCharge || item.requestedDeadline, item.status));
+  const latePending = state.data.pendingItems.filter((item) => isOverdue(item.deadline, item.status));
+  const riskyGoals = state.data.goals.filter((item) => item.status === "Em risco" || goalProgress(item) < 60);
+  return `
+    <div class="grid cols-4">
+      ${metric("Marketing atrasado", lateMarketing.length)}
+      ${metric("Demandas atrasadas", lateDemands.length)}
+      ${metric("Pendências vencidas", latePending.length)}
+      ${metric("Metas em risco", riskyGoals.length)}
+    </div>
+    <div class="grid cols-2">
+      <section class="card">${barChart("Demandas por setor", counts(state.data.internalDemands, "department"))}</section>
+      <section class="card">${barChart("Pendências por categoria", counts(state.data.pendingItems, "category"))}</section>
+    </div>
+    <section class="card">
+      <div class="section-head"><h3>O que precisa de cobrança</h3><button class="primary" data-new="internalDemands">Nova demanda</button></div>
+      ${table(["Origem", "Item", "Prazo", "Status"], managementFollowUpRows().slice(0, 12))}
+    </section>`;
+}
+
+function managementFollowUpRows() {
+  const rows = [];
+  state.data.marketingRequests.forEach((item) => rows.push(["Marketing", item.title || item.requestNumber || "-", deadlineCell(item.neededDate, item.status), status(item.status || "Solicitação criada", isOverdue(item.neededDate, item.status) ? "danger" : "")]));
+  state.data.internalDemands.forEach((item) => rows.push(["Demanda", item.title || item.number || "-", deadlineCell(item.nextCharge || item.requestedDeadline, item.status), status(item.status || "Solicitada", isOverdue(item.nextCharge || item.requestedDeadline, item.status) ? "danger" : "")]));
+  state.data.pendingItems.forEach((item) => rows.push(["Pendência", item.title || "-", deadlineCell(item.deadline, item.status), status(item.status || "Aberta", isOverdue(item.deadline, item.status) ? "danger" : "")]));
+  return rows.sort((a, b) => String(a[2]).localeCompare(String(b[2])));
 }
 
 function salesDashboard() {
@@ -832,6 +929,340 @@ function coverageMap() {
         ${visiblePoints.length > 600 ? `<p class="hint">Mostrando os primeiros 600 locais para manter a tela leve. Use a pesquisa para encontrar um condomínio específico.</p>` : ""}
       </div>
     </section>`;
+}
+
+function roadAreas() {
+  const rows = filteredWithPage("roadAreas").sort((a, b) => String(a.city || "").localeCompare(String(b.city || "")) || String(a.name || "").localeCompare(String(b.name || "")));
+  return `
+    <div class="grid cols-4">
+      ${metric("Áreas cadastradas", state.data.roadAreas.length)}
+      ${metric("Com cobertura", state.data.roadAreas.filter((item) => item.coverage === "Sim" || item.coverage === "Total" || item.coverage === "Parcial").length)}
+      ${metric("Alta prioridade", state.data.roadAreas.filter((item) => ["Crítica", "Alta", "Prioridade A"].includes(item.priority)).length)}
+      ${metric("Ações de rua", state.data.commercialActions.filter((item) => item.actionType === "Ação de rua" || item.type === "Ação de rua").length)}
+    </div>
+    ${filterPanel("roadAreas", [
+      filterText("city", "Cidade"),
+      filterText("neighborhood", "Bairro"),
+      filterSelect("potential", "Potencial", ["Muito alto", "Alto", "Médio", "Baixo"]),
+      filterSelect("priority", "Prioridade", ["Prioridade A", "Prioridade B", "Prioridade C", "Alta", "Média", "Baixa"]),
+      filterSelect("status", "Status", ["Ativa", "Em prospecção", "Aguardando autorização", "Suspensa", "Inativa"])
+    ])}
+    ${listView("Áreas de rua", "roadAreas", ["Área", "Cidade/Bairro", "Cobertura", "Local de montagem", "Potencial", "Última ação", "Ações"], rows.map((item) => [
+      item.name || "-",
+      [item.city, item.neighborhood].filter(Boolean).join(" / ") || "-",
+      item.coverage || "-",
+      item.setupLocation || item.reference || "-",
+      `${item.potential || "-"}<small>${escapeHtml(item.priority || "")}</small>`,
+      lastActionForTarget("roadAreaId", item.id),
+      actions("roadAreas", item.id)
+    ]))}`;
+}
+
+function commercialActions() {
+  const rows = filteredWithPage("commercialActions").sort((a, b) => String(b.startDate || b.date || "").localeCompare(String(a.startDate || a.date || "")));
+  return `
+    <div class="grid cols-5">
+      ${metric("Ações planejadas", rows.length)}
+      ${metric("Confirmadas", rows.filter((item) => item.status === "Confirmada").length)}
+      ${metric("Realizadas", rows.filter((item) => item.status === "Realizada").length)}
+      ${metric("Canceladas", rows.filter((item) => item.status === "Cancelada").length)}
+      ${metric("Meta de vendas", rows.reduce((sum, item) => sum + Number(item.goalSales || 0), 0))}
+    </div>
+    ${filterPanel("commercialActions", [
+      filterInput("from", "Início", "date"),
+      filterInput("to", "Fim", "date"),
+      filterSelect("type", "Tipo", commercialActionTypes()),
+      filterSelect("seller", "Responsável", options("sellers").slice(1)),
+      filterSelect("condo", "Condomínio", options("condos").slice(1)),
+      filterText("region", "Região"),
+      filterSelect("status", "Status", commercialActionStatuses())
+    ])}
+    ${listView("Ações comerciais", "commercialActions", ["Ação", "Período", "Local", "Equipe", "Estrutura", "Meta", "Status", "Ações"], rows.map((item) => [
+      `${escapeHtml(item.name || "-")}<small>${escapeHtml(item.campaign || item.offer || "")}</small>`,
+      `${fmtDate(item.startDate || item.date)} até ${fmtDate(item.endDate || item.startDate || item.date)}`,
+      actionLocation(item),
+      scheduleSellerNames(item).join(", ") || item.responsible || "-",
+      item.structure || item.materials || "-",
+      `${Number(item.goalSales || 0)} venda(s)<small>${Number(item.goalDays || 0)} dia(s) trabalhado(s)</small>`,
+      status(item.status || "Planejada"),
+      actions("commercialActions", item.id, true)
+    ]))}`;
+}
+
+function actionResults() {
+  const rows = filteredWithPage("actionResults").sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  return `
+    <div class="grid cols-4">
+      ${metric("Registros", rows.length)}
+      ${metric("Realizadas", rows.filter((item) => item.realized === "Sim" || item.status === "Realizada").length)}
+      ${metric("Não realizadas", rows.filter((item) => item.realized === "Não" || item.status === "Não realizada").length)}
+      ${metric("Vendas identificadas", rows.reduce((sum, item) => sum + Number(item.salesIdentified || 0), 0))}
+    </div>
+    ${filterPanel("actionResults", [
+      filterInput("from", "Início", "date"),
+      filterInput("to", "Fim", "date"),
+      filterSelect("seller", "Vendedor", options("sellers").slice(1)),
+      filterSelect("condo", "Condomínio", options("condos").slice(1)),
+      filterSelect("status", "Status", ["Realizada", "Parcial", "Não realizada", "Pendente"])
+    ])}
+    ${listView("Registro de realização", "actionResults", ["Data", "Ação", "Local", "Equipe", "Movimento", "Vendas", "Próximo passo", "Ações"], rows.map((item) => [
+      fmtDate(item.date),
+      findById("commercialActions", item.actionId)?.name || item.actionName || "-",
+      actionResultLocation(item),
+      scheduleSellerNames(item).join(", ") || item.presentSellers || "-",
+      `${item.movement || "-"}<small>${escapeHtml(item.weather || "")}</small>`,
+      Number(item.salesIdentified || 0),
+      item.needsReturn === "Sim" ? `Retornar em ${fmtDate(item.nextDate)}` : (item.issues || item.notes || "-"),
+      actions("actionResults", item.id)
+    ]))}`;
+}
+
+function materials() {
+  const rows = filteredWithPage("materials").sort((a, b) => String(a.category || "").localeCompare(String(b.category || "")) || String(a.name || "").localeCompare(String(b.name || "")));
+  return `
+    <div class="grid cols-5">
+      ${metric("Itens", state.data.materials.length)}
+      ${metric("Disponíveis", state.data.materials.filter((item) => materialAvailable(item)).length)}
+      ${metric("Reservados", state.data.materials.filter((item) => item.status === "Reservado").length)}
+      ${metric("Manutenção", state.data.materials.filter((item) => item.status === "Em manutenção").length)}
+      ${metric("Danificados", state.data.materials.filter((item) => item.status === "Danificado").length)}
+    </div>
+    ${filterPanel("materials", [
+      filterSelect("category", "Categoria", materialCategories()),
+      filterSelect("materialStatus", "Status", materialStatuses()),
+      filterText("city", "Local"),
+      filterSelect("seller", "Responsável", options("sellers").slice(1))
+    ])}
+    ${listView("Materiais comerciais", "materials", ["Item", "Categoria", "Quantidade", "Estado", "Local", "Responsável", "Último uso", "Ações"], rows.map((item) => [
+      `${escapeHtml(item.name || "-")}<small>${escapeHtml(item.code || "")}</small>`,
+      item.category || "-",
+      item.quantity || 0,
+      status(item.status || item.state || "Disponível"),
+      item.location || "-",
+      findById("sellers", item.sellerId)?.name || item.responsible || "-",
+      fmtDate(item.lastUseDate),
+      actions("materials", item.id)
+    ]))}`;
+}
+
+function marketingRequests() {
+  const rows = filteredWithPage("marketingRequests").sort((a, b) => String(a.neededDate || "9999").localeCompare(String(b.neededDate || "9999")));
+  return `
+    <div class="grid cols-4">
+      ${metric("Solicitações", rows.length)}
+      ${metric("Em produção", rows.filter((item) => item.status === "Em produção").length)}
+      ${metric("Atrasadas", rows.filter((item) => isOverdue(item.neededDate, item.status)).length)}
+      ${metric("Ajustes", rows.reduce((sum, item) => sum + Number(item.adjustmentCount || 0), 0))}
+    </div>
+    ${filterPanel("marketingRequests", [
+      filterInput("from", "Solicitado de", "date"),
+      filterInput("to", "Até", "date"),
+      filterSelect("type", "Tipo", marketingMaterialTypes()),
+      filterSelect("priority", "Prioridade", priorityLevels()),
+      filterSelect("status", "Status", marketingStatuses()),
+      filterSelect("condo", "Condomínio", options("condos").slice(1))
+    ])}
+    ${listView("Solicitações ao marketing", "marketingRequests", ["Solicitação", "Material", "Condomínio/Campanha", "Necessário em", "Prioridade", "Status", "Responsável", "Ações"], rows.map((item) => [
+      `${escapeHtml(item.requestNumber || item.title || "-")}<small>${escapeHtml(item.objective || "")}</small>`,
+      item.materialType || item.format || "-",
+      [findById("condos", item.condoId)?.name, item.campaign].filter(Boolean).join(" | ") || "-",
+      deadlineCell(item.neededDate, item.status),
+      item.priority || "-",
+      status(item.status || "Solicitação criada", isOverdue(item.neededDate, item.status) ? "danger" : ""),
+      item.marketingOwner || "-",
+      actions("marketingRequests", item.id, true)
+    ]))}`;
+}
+
+function internalDemands() {
+  const rows = filteredWithPage("internalDemands").sort((a, b) => String(a.nextCharge || a.requestedDeadline || "9999").localeCompare(String(b.nextCharge || b.requestedDeadline || "9999")));
+  return `
+    <div class="grid cols-4">
+      ${metric("Demandas", rows.length)}
+      ${metric("Críticas", rows.filter((item) => item.priority === "Crítica").length)}
+      ${metric("Atrasadas", rows.filter((item) => isOverdue(item.nextCharge || item.requestedDeadline, item.status)).length)}
+      ${metric("Vendas impactadas", rows.reduce((sum, item) => sum + Number(item.estimatedLostSales || 0), 0))}
+    </div>
+    ${filterPanel("internalDemands", [
+      filterSelect("department", "Setor", demandDepartments()),
+      filterSelect("priority", "Prioridade", priorityLevels()),
+      filterSelect("status", "Status", demandStatuses()),
+      filterSelect("condo", "Condomínio", options("condos").slice(1))
+    ])}
+    ${listView("Demandas para diretoria e setores", "internalDemands", ["Demanda", "Setor", "Prazo/Cobrança", "Impacto", "Prioridade", "Status", "Resposta", "Ações"], rows.map((item) => [
+      `${escapeHtml(item.number || item.title || "-")}<small>${escapeHtml(item.description || "")}</small>`,
+      `${item.department || "-"}<small>${escapeHtml(item.owner || "")}</small>`,
+      deadlineCell(item.nextCharge || item.requestedDeadline || item.informedDeadline, item.status),
+      `${escapeHtml(item.commercialImpact || "-")}<small>${Number(item.affectedActions || 0)} ação(ões) afetada(s)</small>`,
+      item.priority || "-",
+      status(item.status || "Solicitada", isOverdue(item.nextCharge || item.requestedDeadline, item.status) ? "danger" : ""),
+      item.response || "-",
+      actions("internalDemands", item.id, true)
+    ]))}`;
+}
+
+function pendingItems() {
+  const rows = filteredWithPage("pendingItems").sort((a, b) => String(a.deadline || "9999").localeCompare(String(b.deadline || "9999")));
+  return `
+    <div class="grid cols-4">
+      ${metric("Pendências", rows.length)}
+      ${metric("Abertas", rows.filter((item) => !closedStatuses().includes(item.status)).length)}
+      ${metric("Atrasadas", rows.filter((item) => isOverdue(item.deadline, item.status)).length)}
+      ${metric("Críticas", rows.filter((item) => item.priority === "Crítica").length)}
+    </div>
+    ${filterPanel("pendingItems", [
+      filterSelect("category", "Categoria", pendingCategories()),
+      filterSelect("priority", "Prioridade", priorityLevels()),
+      filterSelect("status", "Status", pendingStatuses()),
+      filterSelect("seller", "Vendedor", options("sellers").slice(1)),
+      filterSelect("condo", "Condomínio", options("condos").slice(1))
+    ])}
+    ${listView("Pendências operacionais", "pendingItems", ["Pendência", "Categoria", "Prazo", "Impacto", "Responsável", "Status", "Próxima providência", "Ações"], rows.map((item) => [
+      `${escapeHtml(item.title || "-")}<small>${escapeHtml(item.description || "")}</small>`,
+      item.category || "-",
+      deadlineCell(item.deadline, item.status),
+      item.impact || "-",
+      item.responsible || findById("sellers", item.sellerId)?.name || "-",
+      status(item.status || "Aberta", isOverdue(item.deadline, item.status) ? "danger" : ""),
+      item.nextStep || "-",
+      actions("pendingItems", item.id, true)
+    ]))}`;
+}
+
+function goals() {
+  const rows = filteredWithPage("goals").sort((a, b) => String(b.period || b.startDate || "").localeCompare(String(a.period || a.startDate || "")));
+  return `
+    <div class="grid cols-4">
+      ${metric("Metas", rows.length)}
+      ${metric("Em risco", rows.filter((item) => item.status === "Em risco").length)}
+      ${metric("Atingidas", rows.filter((item) => ["Atingida", "Superada"].includes(item.status)).length)}
+      ${metric("Progresso médio", `${averageGoalProgress(rows)}%`)}
+    </div>
+    ${filterPanel("goals", [
+      filterSelect("type", "Tipo", goalTypes()),
+      filterSelect("seller", "Vendedor", options("sellers").slice(1)),
+      filterSelect("condo", "Condomínio", options("condos").slice(1)),
+      filterSelect("status", "Status", goalStatuses()),
+      filterText("region", "Região")
+    ])}
+    ${listView("Metas gerenciais", "goals", ["Meta", "Período", "Tipo", "Responsável/Local", "Esperado", "Atual", "Progresso", "Ações"], rows.map((item) => [
+      item.name || "-",
+      item.period || [fmtDate(item.startDate), fmtDate(item.endDate)].filter(Boolean).join(" até ") || "-",
+      item.type || "-",
+      goalTargetLabel(item),
+      item.expected || 0,
+      item.current || 0,
+      goalProgressCell(item),
+      actions("goals", item.id)
+    ]))}`;
+}
+
+function lastActionForTarget(key, id) {
+  const dates = [
+    ...state.data.commercialActions.filter((item) => String(item[key] || "") === String(id)).map((item) => item.startDate || item.date),
+    ...state.data.actionResults.filter((item) => String(item[key] || "") === String(id)).map((item) => item.date)
+  ].filter(Boolean).sort().reverse();
+  return dates[0] ? fmtDate(dates[0]) : "Sem histórico";
+}
+
+function actionLocation(item) {
+  return findById("condos", item.condoId)?.name || findById("roadAreas", item.roadAreaId)?.name || item.region || item.location || "-";
+}
+
+function actionResultLocation(item) {
+  return findById("condos", item.condoId)?.name || findById("roadAreas", item.roadAreaId)?.name || actionLocation(findById("commercialActions", item.actionId) || {}) || "-";
+}
+
+function materialAvailable(item) {
+  return ["Disponível", "Ativo", "Livre"].includes(item.status || item.availability || "Disponível");
+}
+
+function closedStatuses() {
+  return ["Concluída", "Concluído", "Finalizada", "Finalizado", "Cancelada", "Cancelado", "Atingida", "Superada", "Não atingida", "Negada"];
+}
+
+function isOverdue(value, itemStatus = "") {
+  if (!value || closedStatuses().includes(itemStatus)) return false;
+  return String(value).slice(0, 10) < todayISO();
+}
+
+function deadlineCell(value, itemStatus = "") {
+  if (!value) return "-";
+  const overdue = isOverdue(value, itemStatus);
+  return `${fmtDate(value)}<small>${overdue ? "Atrasado" : `${daysUntilISO(String(value).slice(0, 10))} dia(s)`}</small>`;
+}
+
+function goalTargetLabel(item) {
+  return findById("sellers", item.sellerId)?.name || findById("condos", item.condoId)?.name || item.region || item.campaign || "Equipe";
+}
+
+function goalProgress(item) {
+  const expected = Number(item.expected || 0);
+  if (!expected) return 0;
+  return Math.round((Number(item.current || 0) / expected) * 100);
+}
+
+function goalProgressCell(item) {
+  const value = goalProgress(item);
+  const tone = value >= 100 ? "" : value < 60 ? "danger" : "warn";
+  return `${status(`${value}%`, tone)}<small>${escapeHtml(item.status || "Em andamento")}</small>`;
+}
+
+function averageGoalProgress(rows) {
+  if (!rows.length) return 0;
+  return Math.round(rows.reduce((sum, item) => sum + goalProgress(item), 0) / rows.length);
+}
+
+function commercialActionTypes() {
+  return ["Ação de um dia", "Ação semanal", "Plantão recorrente", "Campanha mensal", "Ação de lançamento", "Ação de entrada em condomínio", "Ação promocional", "Ação de rua", "Evento", "Assembleia", "Ação sazonal"];
+}
+
+function commercialActionStatuses() {
+  return ["Planejada", "Confirmada", "Em andamento", "Realizada", "Parcialmente realizada", "Cancelada", "Não realizada", "Remanejada"];
+}
+
+function materialCategories() {
+  return ["Balcão", "Stand", "Mesa", "Cadeira", "Tenda", "Banner", "Faixa", "Wind banner", "Panfletos", "Brindes", "Fardamentos", "Crachás", "Displays", "Extensões", "Iluminação", "Tablets", "Celulares", "Outros"];
+}
+
+function materialStatuses() {
+  return ["Disponível", "Reservado", "Em manutenção", "Danificado", "Indisponível"];
+}
+
+function marketingMaterialTypes() {
+  return ["Panfleto", "Banner", "Faixa", "Card para grupo", "Stories", "Feed", "Reels", "Vídeo", "Comunicado", "Material para síndico", "Material institucional", "Adesivo", "Landing page", "Campanha patrocinada", "Outro"];
+}
+
+function marketingStatuses() {
+  return ["Solicitação criada", "Enviada", "Aguardando retorno", "Em produção", "Recebida para aprovação", "Ajuste solicitado", "Aprovada", "Concluída", "Atrasada", "Cancelada"];
+}
+
+function demandDepartments() {
+  return ["Diretoria", "Marketing", "Engenharia", "Implantação", "Instalação", "Almoxarifado", "Financeiro", "RH", "Frota", "Suporte", "Atendimento", "TI", "Outro"];
+}
+
+function demandStatuses() {
+  return ["A registrar", "Solicitada", "Aguardando resposta", "Em análise", "Aprovada", "Em execução", "Aguardando outro setor", "Bloqueada", "Concluída", "Negada", "Cancelada"];
+}
+
+function pendingCategories() {
+  return ["Pendência do gestor", "Pendência da equipe", "Pendência do marketing", "Pendência da diretoria", "Pendência técnica", "Pendência do condomínio", "Pendência de material", "Pendência logística", "Pendência de implantação", "Pendência de instalação"];
+}
+
+function pendingStatuses() {
+  return ["Aberta", "Em andamento", "Aguardando terceiro", "Bloqueada", "Concluída", "Cancelada"];
+}
+
+function priorityLevels() {
+  return ["Crítica", "Alta", "Média", "Baixa"];
+}
+
+function goalTypes() {
+  return ["Equipe", "Individual", "Semanal", "Mensal", "Condomínio", "Ação", "Região", "Campanha", "Vendas instaladas", "Quantidade de ações", "Dias trabalhados"];
+}
+
+function goalStatuses() {
+  return ["Não iniciada", "Em andamento", "Dentro do esperado", "Em risco", "Atingida", "Superada", "Não atingida"];
 }
 
 function visits() {
@@ -1452,6 +1883,9 @@ function formFields(collection, item = {}) {
   const condoOptions = options("condos", item.condoId);
   const sellerOptions = options("sellers", item.sellerId);
   const planOptions = options("plans", item.planId);
+  const roadAreaOptions = options("roadAreas", item.roadAreaId);
+  const actionOptions = options("commercialActions", item.actionId);
+  const scheduleOptions = options("weeklySchedules", item.scheduleId);
   const fields = {
     condos: [
       input("name", "Nome do condomínio", item.name, "text", "full"),
@@ -1541,7 +1975,179 @@ function formFields(collection, item = {}) {
       select("status", "Status", ["Ativo", "Promocional", "Inativo"], item.status),
       area("details", "Detalhes / tabela colada", item.details, "full")
     ],
-    users: [
+    roadAreas: [
+      input("name", "Nome da área", item.name, "text", "full"),
+      input("city", "Cidade", item.city),
+      input("neighborhood", "Bairro", item.neighborhood),
+      area("streets", "Ruas abrangidas", item.streets, "full"),
+      input("ceps", "CEPs", item.ceps),
+      input("reference", "Ponto de referência", item.reference),
+      input("locationLink", "Link de localização", item.locationLink, "url", "full"),
+      select("coverage", "Cobertura disponível", ["Sim", "Não", "Total", "Parcial", "A confirmar"], item.coverage || "A confirmar"),
+      input("estimatedHomes", "Residências estimadas", item.estimatedHomes, "number"),
+      input("flow", "Circulação estimada", item.flow, "number"),
+      input("setupLocation", "Local de montagem", item.setupLocation, "text", "full"),
+      select("authorizationNeeded", "Precisa autorização", ["Sim", "Não", "A confirmar"], item.authorizationNeeded || "A confirmar"),
+      input("authorizationOwner", "Responsável pela autorização", item.authorizationOwner),
+      input("recommendedHours", "Horários recomendados", item.recommendedHours),
+      input("recommendedDays", "Dias recomendados", item.recommendedDays),
+      input("competitors", "Concorrentes", item.competitors, "text", "full"),
+      select("priority", "Prioridade", ["Prioridade A", "Prioridade B", "Prioridade C", "Alta", "Média", "Baixa"], item.priority || "Prioridade B"),
+      select("potential", "Potencial", ["Muito alto", "Alto", "Médio", "Baixo"], item.potential || "Médio"),
+      select("status", "Status", ["Ativa", "Em prospecção", "Aguardando autorização", "Suspensa", "Inativa"], item.status || "Ativa"),
+      area("notes", "Observações", item.notes, "full")
+    ],
+    commercialActions: [
+      input("name", "Nome da ação", item.name, "text", "full"),
+      select("condoId", "Condomínio", condoOptions, item.condoId),
+      select("roadAreaId", "Área de rua", roadAreaOptions, item.roadAreaId),
+      input("region", "Região", item.region),
+      input("campaign", "Campanha", item.campaign),
+      input("startDate", "Data inicial", item.startDate || todayISO(), "date"),
+      input("endDate", "Data final", item.endDate || item.startDate || todayISO(), "date"),
+      input("weekdays", "Dias da semana", item.weekdays),
+      input("hours", "Horários", item.hours),
+      multiSelect("sellerIds", "Vendedores participantes", sellerOptions.slice(1), item.sellerIds || (item.sellerId ? [item.sellerId] : []), "full"),
+      input("responsible", "Responsável pela organização", item.responsible),
+      select("type", "Tipo da ação", commercialActionTypes(), item.type || "Ação de um dia"),
+      input("structure", "Estrutura utilizada", item.structure || "Balcão comercial"),
+      input("objective", "Objetivo", item.objective, "text", "full"),
+      input("goalSales", "Meta de vendas", item.goalSales, "number"),
+      input("goalDays", "Meta de dias trabalhados", item.goalDays, "number"),
+      input("offer", "Oferta utilizada", item.offer),
+      select("planId", "Plano divulgado", planOptions, item.planId),
+      area("materials", "Materiais necessários", item.materials, "full"),
+      area("marketingNeeded", "Divulgação necessária", item.marketingNeeded, "full"),
+      select("authorizationConfirmed", "Autorização confirmada", ["Sim", "Não", "Pendente"], item.authorizationConfirmed || "Pendente"),
+      select("technicalConfirmed", "Situação técnica confirmada", ["Sim", "Não", "Pendente"], item.technicalConfirmed || "Pendente"),
+      select("capacityConfirmed", "Capacidade de instalação confirmada", ["Sim", "Não", "Pendente"], item.capacityConfirmed || "Pendente"),
+      input("budget", "Orçamento previsto", item.budget, "number"),
+      select("status", "Status", commercialActionStatuses(), item.status || "Planejada"),
+      area("notes", "Observações", item.notes, "full")
+    ],
+    actionResults: [
+      select("actionId", "Ação comercial", actionOptions, item.actionId, "full"),
+      select("scheduleId", "Programação relacionada", scheduleOptions, item.scheduleId, "full"),
+      select("condoId", "Condomínio", condoOptions, item.condoId),
+      select("roadAreaId", "Área de rua", roadAreaOptions, item.roadAreaId),
+      select("realized", "Ação realizada", ["Sim", "Parcial", "Não"], item.realized || "Sim"),
+      input("date", "Data real", item.date || todayISO(), "date"),
+      input("startTime", "Início real", item.startTime || "09:00", "time"),
+      input("endTime", "Término real", item.endTime || "12:00", "time"),
+      multiSelect("sellerIds", "Vendedores presentes", sellerOptions.slice(1), item.sellerIds || [], "full"),
+      input("absentSellers", "Vendedores ausentes", item.absentSellers, "text", "full"),
+      input("absenceReason", "Motivo de ausência", item.absenceReason, "text", "full"),
+      select("structureMounted", "Estrutura montada", ["Sim", "Parcial", "Não"], item.structureMounted || "Sim"),
+      input("exactLocation", "Local exato", item.exactLocation, "text", "full"),
+      select("movement", "Movimento", ["Alto", "Médio", "Baixo"], item.movement || "Médio"),
+      input("weather", "Condição climática", item.weather),
+      input("flyers", "Panfletos utilizados", item.flyers, "number"),
+      input("approaches", "Abordagens estimadas", item.approaches, "number"),
+      input("leads", "Interessados estimados", item.leads, "number"),
+      input("salesIdentified", "Vendas identificadas", item.salesIdentified, "number"),
+      input("photos", "Link das fotos", item.photos, "url", "full"),
+      area("issues", "Problemas encontrados", item.issues, "full"),
+      area("condoFeedback", "Retorno do condomínio", item.condoFeedback, "full"),
+      select("needsReturn", "Precisa nova ação", ["Sim", "Não", "Avaliar"], item.needsReturn || "Avaliar"),
+      input("nextDate", "Próxima data sugerida", item.nextDate, "date"),
+      select("status", "Status", ["Realizada", "Parcial", "Não realizada", "Pendente"], item.status || "Realizada"),
+      area("notes", "Observações", item.notes, "full")
+    ],
+    materials: [
+      input("name", "Nome do item", item.name, "text", "full"),
+      input("code", "Código", item.code),
+      select("category", "Categoria", materialCategories(), item.category || "Balcão"),
+      input("quantity", "Quantidade", item.quantity || 1, "number"),
+      input("state", "Estado", item.state || "Bom"),
+      input("location", "Local onde está guardado", item.location, "text", "full"),
+      select("sellerId", "Responsável atual", sellerOptions, item.sellerId),
+      select("status", "Status", materialStatuses(), item.status || "Disponível"),
+      input("lastUseDate", "Data da última utilização", item.lastUseDate, "date"),
+      select("actionId", "Ação relacionada", actionOptions, item.actionId),
+      input("photo", "Foto/link", item.photo, "url", "full"),
+      area("notes", "Observações", item.notes, "full")
+    ],
+    marketingRequests: [
+      input("requestNumber", "Número da solicitação", item.requestNumber),
+      input("title", "Título", item.title, "text", "full"),
+      select("condoId", "Condomínio", condoOptions, item.condoId),
+      input("campaign", "Campanha", item.campaign),
+      select("type", "Tipo de material", marketingMaterialTypes(), item.type || item.materialType || "Card para grupo"),
+      input("materialType", "Material específico", item.materialType),
+      input("objective", "Objetivo", item.objective, "text", "full"),
+      input("audience", "Público", item.audience),
+      input("offer", "Oferta", item.offer),
+      area("requestedText", "Texto solicitado", item.requestedText, "full"),
+      input("quantity", "Quantidade", item.quantity, "number"),
+      input("format", "Formato", item.format),
+      input("size", "Dimensão", item.size),
+      input("requestDate", "Data da solicitação", item.requestDate || todayISO(), "date"),
+      input("neededDate", "Data necessária", item.neededDate, "date"),
+      select("priority", "Prioridade", priorityLevels(), item.priority || "Média"),
+      input("marketingOwner", "Responsável no marketing", item.marketingOwner),
+      select("status", "Status", marketingStatuses(), item.status || "Solicitação criada"),
+      input("promisedDate", "Data prometida", item.promisedDate, "date"),
+      input("receivedDate", "Data recebida", item.receivedDate, "date"),
+      area("adjustments", "Ajustes solicitados", item.adjustments, "full"),
+      input("adjustmentCount", "Quantidade de ajustes", item.adjustmentCount, "number"),
+      input("fileUrl", "Arquivo recebido/link", item.fileUrl, "url", "full"),
+      select("approval", "Aprovação", ["Pendente", "Aprovado", "Reprovado", "Ajustar"], item.approval || "Pendente"),
+      area("notes", "Observações", item.notes, "full")
+    ],
+    internalDemands: [
+      input("number", "Número", item.number),
+      input("title", "Título", item.title, "text", "full"),
+      area("description", "Descrição", item.description, "full"),
+      select("department", "Setor responsável", demandDepartments(), item.department || "Diretoria"),
+      input("owner", "Nome do responsável", item.owner),
+      input("requestDate", "Data da solicitação", item.requestDate || todayISO(), "date"),
+      input("requestedDeadline", "Prazo solicitado", item.requestedDeadline, "date"),
+      input("informedDeadline", "Prazo informado", item.informedDeadline, "date"),
+      select("priority", "Prioridade", priorityLevels(), item.priority || "Média"),
+      select("condoId", "Condomínio relacionado", condoOptions, item.condoId),
+      select("actionId", "Ação relacionada", actionOptions, item.actionId),
+      input("commercialImpact", "Impacto comercial", item.commercialImpact, "text", "full"),
+      input("affectedActions", "Ações afetadas", item.affectedActions, "number"),
+      input("estimatedLostSales", "Vendas estimadas afetadas", item.estimatedLostSales, "number"),
+      select("status", "Status", demandStatuses(), item.status || "Solicitada"),
+      input("lastUpdate", "Última atualização", item.lastUpdate, "date"),
+      input("nextCharge", "Próxima cobrança", item.nextCharge, "date"),
+      area("response", "Resposta recebida", item.response, "full"),
+      input("attachment", "Anexo/link", item.attachment, "url", "full"),
+      area("notes", "Observações", item.notes, "full")
+    ],
+    pendingItems: [
+      input("title", "Título", item.title, "text", "full"),
+      area("description", "Descrição", item.description, "full"),
+      select("category", "Categoria", pendingCategories(), item.category || "Pendência do gestor"),
+      input("responsible", "Responsável", item.responsible),
+      input("openedAt", "Data de abertura", item.openedAt || todayISO(), "date"),
+      input("deadline", "Prazo", item.deadline, "date"),
+      select("priority", "Prioridade", priorityLevels(), item.priority || "Média"),
+      select("condoId", "Condomínio", condoOptions, item.condoId),
+      select("sellerId", "Vendedor afetado", sellerOptions, item.sellerId),
+      select("actionId", "Ação afetada", actionOptions, item.actionId),
+      input("impact", "Impacto", item.impact, "text", "full"),
+      select("status", "Status", pendingStatuses(), item.status || "Aberta"),
+      input("nextStep", "Próxima providência", item.nextStep, "text", "full"),
+      input("doneDate", "Data de conclusão", item.doneDate, "date"),
+      area("notes", "Observações", item.notes, "full")
+    ],
+    goals: [
+      input("name", "Nome da meta", item.name, "text", "full"),
+      input("period", "Período", item.period || new Date().toISOString().slice(0, 7)),
+      input("startDate", "Início", item.startDate, "date"),
+      input("endDate", "Fim", item.endDate, "date"),
+      select("type", "Tipo", goalTypes(), item.type || "Equipe"),
+      select("sellerId", "Vendedor", sellerOptions, item.sellerId),
+      select("condoId", "Condomínio", condoOptions, item.condoId),
+      input("region", "Região", item.region),
+      input("campaign", "Campanha", item.campaign),
+      input("expected", "Quantidade esperada", item.expected, "number"),
+      input("current", "Resultado atual", item.current, "number"),
+      select("status", "Status", goalStatuses(), item.status || "Em andamento"),
+      area("notes", "Observações", item.notes, "full")
+    ],    users: [
       input("name", "Nome", item.name, "text", "full"),
       input("email", "Email", item.email, "email"),
       input("password", item.id ? "Nova senha (opcional)" : "Senha", "", "password"),
@@ -1592,7 +2198,18 @@ function openForm(collection, item = {}) {
         raw.city = raw.city || condo?.city || "";
         raw.neighborhood = raw.neighborhood || condo?.neighborhood || "";
       }
-      const body = normalize(collection, raw);
+      if (["commercialActions", "actionResults", "marketingRequests", "internalDemands", "pendingItems", "goals"].includes(collection)) {
+        const condo = findById("condos", raw.condoId);
+        if (condo) raw.condoName = raw.condoName || condo.name || "";
+      }
+      if (collection === "commercialActions" && !raw.sellerId && Array.isArray(raw.sellerIds)) raw.sellerId = raw.sellerIds[0] || "";
+      if (collection === "actionResults") {
+        if (!raw.sellerId && Array.isArray(raw.sellerIds)) raw.sellerId = raw.sellerIds[0] || "";
+        const action = findById("commercialActions", raw.actionId);
+        raw.actionName = raw.actionName || action?.name || "";
+        raw.condoId = raw.condoId || action?.condoId || "";
+        raw.roadAreaId = raw.roadAreaId || action?.roadAreaId || "";
+      }      const body = normalize(collection, raw);
       const saved = await request(item.id ? `/api/${collection}/${item.id}` : `/api/${collection}`, {
         method: item.id ? "PUT" : "POST",
         body
@@ -1640,7 +2257,7 @@ function multiSelect(name, label, values, selected = [], klass = "") {
 }
 
 function options(collection) {
-  const values = (state.data[collection] || []).map((item) => ({ id: item.id, name: item.name }));
+  const values = (state.data[collection] || []).map((item) => ({ id: item.id, name: item.name || item.title || item.condoName || item.customer || `${fmtDate(item.date || item.startDate)} - ${item.status || item.type || collection}` }));
   return [{ id: "", name: "Selecione" }, ...values];
 }
 
@@ -2177,7 +2794,7 @@ function coverageCanvas(points, importedPoints = []) {
 }
 
 function normalize(collection, body) {
-  ["price", "installation", "value", "goal", "capacity", "followUpDays"].forEach((key) => {
+  ["price", "installation", "value", "goal", "capacity", "followUpDays", "estimatedHomes", "flow", "goalSales", "goalDays", "budget", "quantity", "flyers", "approaches", "leads", "salesIdentified", "adjustmentCount", "affectedActions", "estimatedLostSales", "expected", "current"].forEach((key) => {
     if (body[key] !== undefined) body[key] = Number(body[key] || 0);
   });
   if (body.date && body.date.length === 16) body.date = new Date(body.date).toISOString();
@@ -2950,9 +3567,33 @@ function eventFromRef(ref) {
     const endDate = item.date ? `${item.date}T${item.endTime || "10:00"}:00` : "";
     return { id, type, date, endDate, condoId: item.condoId, sellerId: item.sellerId, sellerIds: item.sellerIds, attendees: scheduleSellerEmails(item), title: `${condo?.name || item.condoName || "Programação"} - ${scheduleSellers(item) || "Equipe"}`, status: item.status, note: item.notes || item.workArea || item.accessMode || "", location: item.address || condo?.address || "" };
   }
-  const item = findById("expansions", id);
-  if (!item) return null;
-  return { id, type, date: item.date || item.expectedDate, condoId: item.condoId, sellerId: item.sellerId, title: `${item.type || "Expansão"} - ${item.condoName || "Condomínio"}`, status: item.status, note: item.notes || `Protocolo IXC: ${item.protocol || "-"}`, location: item.address || "" };
+  if (type === "expansions") {
+    const item = findById("expansions", id);
+    if (!item) return null;
+    return { id, type, date: item.date || item.expectedDate, condoId: item.condoId, sellerId: item.sellerId, title: `${item.type || "Expansão"} - ${item.condoName || "Condomínio"}`, status: item.status, note: item.notes || `Protocolo IXC: ${item.protocol || "-"}`, location: item.address || "" };
+  }
+  if (type === "commercialActions") {
+    const item = findById("commercialActions", id);
+    if (!item) return null;
+    const date = item.startDate ? `${item.startDate}T09:00:00` : item.date;
+    return { id, type, date, condoId: item.condoId, sellerId: item.sellerId, sellerIds: item.sellerIds, title: item.name || "Ação comercial", status: item.status, note: [item.type, item.structure, item.campaign].filter(Boolean).join(" | "), location: actionLocation(item) };
+  }
+  if (type === "marketingRequests") {
+    const item = findById("marketingRequests", id);
+    if (!item) return null;
+    return { id, type, date: item.neededDate, condoId: item.condoId, title: `Marketing - ${item.title || item.materialType || "Material"}`, status: item.status, note: item.objective || item.campaign || "", location: findById("condos", item.condoId)?.name || "" };
+  }
+  if (type === "internalDemands") {
+    const item = findById("internalDemands", id);
+    if (!item) return null;
+    return { id, type, date: item.nextCharge || item.requestedDeadline || item.informedDeadline, condoId: item.condoId, title: `${item.department || "Demanda"} - ${item.title || item.number || "Cobrança"}`, status: item.status, note: item.commercialImpact || item.response || "", location: findById("condos", item.condoId)?.name || "" };
+  }
+  if (type === "pendingItems") {
+    const item = findById("pendingItems", id);
+    if (!item) return null;
+    return { id, type, date: item.deadline, condoId: item.condoId, sellerId: item.sellerId, title: `Pendência - ${item.title || item.category || "Operação"}`, status: item.status, note: item.nextStep || item.impact || "", location: findById("condos", item.condoId)?.name || "" };
+  }
+  return null;
 }
 
 function backupData() {
@@ -3016,6 +3657,10 @@ function reportAreas() {
     ["vendas", "Vendas", "Produção comercial, ranking e vendas recentes."],
     ["visitas", "Relacionamento", "Síndicos, administradoras, cupons e retornos."],
     ["programacao", "Programação", "Roteiros semanais e atuação da equipe."],
+    ["operacao", "Operação externa", "Ações comerciais, realização e áreas de rua."],
+    ["materiais", "Materiais", "Disponibilidade, reserva e manutenção da estrutura."],
+    ["demandas", "Demandas", "Marketing, diretoria, setores e pendências."],
+    ["metas", "Metas", "Metas por equipe, vendedor, condomínio e campanha."],
     ["expansao", "Expansão", "Vistorias, inspeções e implantações."],
     ["condominios", "Condomínios", "Cadastro mestre, status e prioridades."],
     ["planos", "Planos", "Planos ativos, valores e velocidades."]
@@ -3083,6 +3728,46 @@ function reportChartData(filter) {
       tertiary: counts(state.data.visits, "partnershipInterest")
     };
   }
+  if (filter === "operacao") {
+    return {
+      primaryTitle: "Ações por status",
+      primary: counts(state.data.commercialActions, "status").slice(0, 8),
+      secondaryTitle: "Tipos de ação",
+      secondary: counts(state.data.commercialActions, "type"),
+      tertiaryTitle: "Movimento registrado",
+      tertiary: counts(state.data.actionResults, "movement")
+    };
+  }
+  if (filter === "materiais") {
+    return {
+      primaryTitle: "Materiais por categoria",
+      primary: counts(state.data.materials, "category").slice(0, 8),
+      secondaryTitle: "Status dos materiais",
+      secondary: counts(state.data.materials, "status"),
+      tertiaryTitle: "Responsáveis",
+      tertiary: counts(state.data.materials.map((item) => ({ owner: findById("sellers", item.sellerId)?.name || item.responsible || "Sem responsável" })), "owner").slice(0, 8)
+    };
+  }
+  if (filter === "demandas") {
+    return {
+      primaryTitle: "Demandas por setor",
+      primary: counts(state.data.internalDemands, "department").slice(0, 8),
+      secondaryTitle: "Pendências por status",
+      secondary: counts(state.data.pendingItems, "status"),
+      tertiaryTitle: "Marketing por status",
+      tertiary: counts(state.data.marketingRequests, "status").slice(0, 8)
+    };
+  }
+  if (filter === "metas") {
+    return {
+      primaryTitle: "Metas por tipo",
+      primary: counts(state.data.goals, "type").slice(0, 8),
+      secondaryTitle: "Status das metas",
+      secondary: counts(state.data.goals, "status"),
+      tertiaryTitle: "Progresso por meta",
+      tertiary: state.data.goals.slice(0, 8).map((item) => ({ label: item.name || item.type || "Meta", value: goalProgress(item) }))
+    };
+  }
   if (filter === "expansao") {
     return {
       primaryTitle: "Demandas por status",
@@ -3112,7 +3797,9 @@ function reportChartData(filter) {
       { label: "Vendas", value: sales.length },
       { label: "Relacionamentos", value: state.data.visits.length },
       { label: "Programações", value: state.data.weeklySchedules.length },
-      { label: "Expansão", value: state.data.expansions.length }
+      { label: "Expansão", value: state.data.expansions.length },
+      { label: "Ações", value: state.data.commercialActions.length },
+      { label: "Pendências", value: state.data.pendingItems.length }
     ],
     tertiaryTitle: "Relacionamentos por status",
     tertiary: counts(state.data.visits, "status").slice(0, 8)
@@ -3163,8 +3850,8 @@ function reportOptionList(filter = state.reportFilter) {
       commonMetrics,
       { key: "salesRanking", label: "Ranking comercial", description: "Vendedores com vendas e receita no mês." },
       { key: "relationships", label: "Relacionamento", description: "Condomínios que precisam de retorno." },
-      { key: "expansion", label: "Expansão", description: "Demandas abertas e próximas etapas." },
-      { key: "plans", label: "Planos", description: "Planos ativos mais relevantes." }
+      { key: "commercialActions", label: "Ações comerciais", description: "Ações programadas e status da operação externa." },
+      { key: "internalDemands", label: "Demandas", description: "Cobranças internas e gargalos." }
     ],
     vendas: [
       commonMetrics,
@@ -3182,6 +3869,28 @@ function reportOptionList(filter = state.reportFilter) {
       commonMetrics,
       { key: "scheduleByDay", label: "Roteiro por dia", description: "Programações agrupadas por data." },
       { key: "scheduleConsultants", label: "Consultores na rota", description: "Distribuição da equipe por programação." }
+    ],
+    operacao: [
+      commonMetrics,
+      { key: "commercialActions", label: "Ações comerciais", description: "Planejamento, status, estrutura e meta." },
+      { key: "actionResults", label: "Realizações", description: "O que foi executado e resultado em campo." },
+      { key: "roadAreas", label: "Áreas de rua", description: "Pontos externos disponíveis para atuação." }
+    ],
+    materiais: [
+      commonMetrics,
+      { key: "materials", label: "Materiais comerciais", description: "Estoque, status e responsáveis." },
+      { key: "materialIssues", label: "Materiais com restrição", description: "Itens reservados, danificados ou em manutenção." }
+    ],
+    demandas: [
+      commonMetrics,
+      { key: "marketingRequests", label: "Marketing", description: "Solicitações, prazos e atrasos." },
+      { key: "internalDemands", label: "Demandas internas", description: "Cobranças para diretoria e setores." },
+      { key: "pendingItems", label: "Pendências", description: "Pendências operacionais e impacto." }
+    ],
+    metas: [
+      commonMetrics,
+      { key: "goals", label: "Metas", description: "Meta, resultado atual e progresso." },
+      { key: "goalRisks", label: "Metas em risco", description: "Metas abaixo do ritmo esperado." }
     ],
     expansao: [
       commonMetrics,
@@ -3277,7 +3986,7 @@ function reportMetricRows(filter = state.reportFilter) {
   const month = new Date().toISOString().slice(0, 7);
   const salesMonth = visibleSalesRows().filter((sale) => String(sale.date || "").startsWith(month));
   const revenue = salesMonth.reduce((sum, sale) => sum + Number(sale.value || 0), 0);
-  const openVisits = state.data.visits.filter((visit) => !["Finalizado", "Visitado", "Concluida", "Concluída"].includes(visit.status)).length;
+  const openVisits = state.data.visits.filter((visit) => !["Finalizado", "Visitado", "Concluída"].includes(visit.status)).length;
   const openExpansions = state.data.expansions.filter((item) => !["Concluído", "Reprovado"].includes(item.status)).length;
   const latest = latestVisitByCondo();
   const stale30 = state.data.condos.filter((condo) => daysSince(latest.get(condo.id)?.date) > 30).length;
@@ -3286,48 +3995,17 @@ function reportMetricRows(filter = state.reportFilter) {
   const activePlans = state.data.plans.filter((plan) => plan.status !== "Inativo");
   const activeCondos = state.data.condos.filter((condo) => condo.status !== "Inativo");
   const metricMap = {
-    vendas: [
-      ["Vendas no mês", salesMonth.length],
-      ["Receita do mês", money(revenue)],
-      ["Ticket médio", money(salesMonth.length ? revenue / salesMonth.length : 0)],
-      ["Meta de vendas", visibleCommercialSellers().reduce((sum, seller) => sum + Number(seller.goal || 0), 0)]
-    ],
-    visitas: [
-      ["Relacionamentos", state.data.visits.length],
-      ["Abertos", openVisits],
-      ["Cupons entregues", state.data.visits.filter((visit) => visit.couponDelivered === "Sim" || visit.couponCode).length],
-      ["Sem visita > 30 dias", stale30]
-    ],
-    programacao: [
-      ["Rotas futuras", weekRows.length],
-      ["Condomínios na rota", new Set(weekRows.map((item) => item.condoId).filter(Boolean)).size],
-      ["Consultores envolvidos", new Set(weekSellerIds).size],
-      ["Atuações externas", weekRows.filter((item) => item.accessMode === "Ficar externo").length]
-    ],
-    expansao: [
-      ["Demandas", state.data.expansions.length],
-      ["Abertas", openExpansions],
-      ["Aprovadas", state.data.expansions.filter((item) => item.status === "Aprovado").length],
-      ["Concluídas", state.data.expansions.filter((item) => item.status === "Concluído").length]
-    ],
-    condominios: [
-      ["Condomínios", state.data.condos.length],
-      ["Ativos", activeCondos.length],
-      ["Cidades", new Set(state.data.condos.map((condo) => condo.city).filter(Boolean)).size],
-      ["Unidades", state.data.condos.reduce((sum, condo) => sum + Number(condo.capacity || 0), 0)]
-    ],
-    planos: [
-      ["Planos ativos", activePlans.length],
-      ["Promocionais", state.data.plans.filter((plan) => plan.status === "Promocional").length],
-      ["Valor médio", money(activePlans.length ? activePlans.reduce((sum, plan) => sum + Number(plan.price || 0), 0) / activePlans.length : 0)],
-      ["Cidades atendidas", new Set(activePlans.map((plan) => plan.city).filter(Boolean)).size]
-    ],
-    geral: [
-      ["Vendas no mês", salesMonth.length],
-      ["Receita do mês", money(revenue)],
-      ["Relacionamentos abertos", openVisits],
-      ["Expansões abertas", openExpansions]
-    ]
+    vendas: [["Vendas no mês", salesMonth.length], ["Receita do mês", money(revenue)], ["Ticket médio", money(salesMonth.length ? revenue / salesMonth.length : 0)], ["Meta de vendas", visibleCommercialSellers().reduce((sum, seller) => sum + Number(seller.goal || 0), 0)]],
+    visitas: [["Relacionamentos", state.data.visits.length], ["Abertos", openVisits], ["Cupons entregues", state.data.visits.filter((visit) => visit.couponDelivered === "Sim" || visit.couponCode).length], ["Sem visita > 30 dias", stale30]],
+    programacao: [["Rotas futuras", weekRows.length], ["Condomínios na rota", new Set(weekRows.map((item) => item.condoId).filter(Boolean)).size], ["Consultores envolvidos", new Set(weekSellerIds).size], ["Atuações externas", weekRows.filter((item) => item.accessMode === "Ficar externo").length]],
+    operacao: [["Ações comerciais", state.data.commercialActions.length], ["Realizações registradas", state.data.actionResults.length], ["Áreas de rua", state.data.roadAreas.length], ["Vendas identificadas", state.data.actionResults.reduce((sum, item) => sum + Number(item.salesIdentified || 0), 0)]],
+    materiais: [["Itens cadastrados", state.data.materials.length], ["Disponíveis", state.data.materials.filter((item) => materialAvailable(item)).length], ["Reservados", state.data.materials.filter((item) => item.status === "Reservado").length], ["Com restrição", state.data.materials.filter((item) => !materialAvailable(item)).length]],
+    demandas: [["Marketing", state.data.marketingRequests.length], ["Demandas internas", state.data.internalDemands.length], ["Pendências", state.data.pendingItems.length], ["Atrasadas", [...state.data.marketingRequests, ...state.data.internalDemands, ...state.data.pendingItems].filter((item) => isOverdue(item.neededDate || item.nextCharge || item.requestedDeadline || item.deadline, item.status)).length]],
+    metas: [["Metas cadastradas", state.data.goals.length], ["Atingidas", state.data.goals.filter((item) => ["Atingida", "Superada"].includes(item.status)).length], ["Em risco", state.data.goals.filter((item) => item.status === "Em risco").length], ["Progresso médio", `${averageGoalProgress(state.data.goals)}%`]],
+    expansao: [["Demandas", state.data.expansions.length], ["Abertas", openExpansions], ["Aprovadas", state.data.expansions.filter((item) => item.status === "Aprovado").length], ["Concluídas", state.data.expansions.filter((item) => item.status === "Concluído").length]],
+    condominios: [["Condomínios", state.data.condos.length], ["Ativos", activeCondos.length], ["Cidades", new Set(state.data.condos.map((condo) => condo.city).filter(Boolean)).size], ["Unidades", state.data.condos.reduce((sum, condo) => sum + Number(condo.capacity || 0), 0)]],
+    planos: [["Planos ativos", activePlans.length], ["Promocionais", state.data.plans.filter((plan) => plan.status === "Promocional").length], ["Valor médio", money(activePlans.length ? activePlans.reduce((sum, plan) => sum + Number(plan.price || 0), 0) / activePlans.length : 0)], ["Cidades atendidas", new Set(activePlans.map((plan) => plan.city).filter(Boolean)).size]],
+    geral: [["Vendas no mês", salesMonth.length], ["Receita do mês", money(revenue)], ["Relacionamentos abertos", openVisits], ["Ações abertas", state.data.commercialActions.filter((item) => !closedStatuses().includes(item.status)).length]]
   };
   return metricMap[filter] || metricMap.geral;
 }
@@ -3359,6 +4037,16 @@ function reportEssentialSections(filter = state.reportFilter) {
   if (selected.has("condoMaster")) sections.push(reportCondoMasterSection());
   if (selected.has("plans")) sections.push(reportPlansSection());
   if (selected.has("plansByCity")) sections.push(reportPlansByCitySection());
+  if (selected.has("commercialActions")) sections.push(reportCommercialActionsSection());
+  if (selected.has("actionResults")) sections.push(reportActionResultsSection());
+  if (selected.has("roadAreas")) sections.push(reportRoadAreasSection());
+  if (selected.has("materials")) sections.push(reportMaterialsSection(false));
+  if (selected.has("materialIssues")) sections.push(reportMaterialsSection(true));
+  if (selected.has("marketingRequests")) sections.push(reportMarketingSection());
+  if (selected.has("internalDemands")) sections.push(reportInternalDemandsSection());
+  if (selected.has("pendingItems")) sections.push(reportPendingItemsSection());
+  if (selected.has("goals")) sections.push(reportGoalsSection(false));
+  if (selected.has("goalRisks")) sections.push(reportGoalsSection(true));
   return sections.join("");
 }
 
@@ -3482,6 +4170,47 @@ function reportPlansByCitySection() {
   return reportSection("Planos por cidade", ["Cidade", "Planos", "Menor valor", "Maior valor"], rows);
 }
 
+function reportCommercialActionsSection() {
+  const rows = state.data.commercialActions.slice(0, 14).map((item) => [item.name || "-", fmtDate(item.startDate || item.date), actionLocation(item), item.type || "-", item.structure || "-", item.status || "Planejada"]);
+  return reportSection("Ações comerciais", ["Ação", "Data", "Local", "Tipo", "Estrutura", "Status"], rows);
+}
+
+function reportActionResultsSection() {
+  const rows = state.data.actionResults.slice(0, 14).map((item) => [fmtDate(item.date), findById("commercialActions", item.actionId)?.name || item.actionName || "-", actionResultLocation(item), scheduleSellerNames(item).join(", ") || "-", item.movement || "-", Number(item.salesIdentified || 0)]);
+  return reportSection("Realização das ações", ["Data", "Ação", "Local", "Equipe", "Movimento", "Vendas"], rows);
+}
+
+function reportRoadAreasSection() {
+  const rows = state.data.roadAreas.slice(0, 14).map((item) => [item.name || "-", item.city || "-", item.neighborhood || "-", item.coverage || "-", item.potential || "-", item.status || "Ativa"]);
+  return reportSection("Áreas de rua", ["Área", "Cidade", "Bairro", "Cobertura", "Potencial", "Status"], rows);
+}
+
+function reportMaterialsSection(onlyIssues = false) {
+  const source = onlyIssues ? state.data.materials.filter((item) => !materialAvailable(item)) : state.data.materials;
+  const rows = source.slice(0, 14).map((item) => [item.name || "-", item.category || "-", item.quantity || 0, item.status || "Disponível", item.location || "-", findById("sellers", item.sellerId)?.name || item.responsible || "-"]);
+  return reportSection(onlyIssues ? "Materiais com restrição" : "Materiais comerciais", ["Item", "Categoria", "Qtd", "Status", "Local", "Responsável"], rows);
+}
+
+function reportMarketingSection() {
+  const rows = state.data.marketingRequests.slice(0, 14).map((item) => [item.title || item.requestNumber || "-", item.materialType || item.type || "-", findById("condos", item.condoId)?.name || item.campaign || "-", fmtDate(item.neededDate), item.priority || "-", item.status || "Solicitação criada"]);
+  return reportSection("Solicitações ao marketing", ["Solicitação", "Material", "Origem", "Necessário", "Prioridade", "Status"], rows);
+}
+
+function reportInternalDemandsSection() {
+  const rows = state.data.internalDemands.slice(0, 14).map((item) => [item.title || item.number || "-", item.department || "-", fmtDate(item.nextCharge || item.requestedDeadline), item.priority || "-", item.status || "Solicitada", item.commercialImpact || "-"]);
+  return reportSection("Demandas internas", ["Demanda", "Setor", "Prazo", "Prioridade", "Status", "Impacto"], rows);
+}
+
+function reportPendingItemsSection() {
+  const rows = state.data.pendingItems.slice(0, 14).map((item) => [item.title || "-", item.category || "-", fmtDate(item.deadline), item.priority || "-", item.status || "Aberta", item.nextStep || "-"]);
+  return reportSection("Pendências", ["Pendência", "Categoria", "Prazo", "Prioridade", "Status", "Providência"], rows);
+}
+
+function reportGoalsSection(onlyRisk = false) {
+  const source = onlyRisk ? state.data.goals.filter((item) => item.status === "Em risco" || goalProgress(item) < 60) : state.data.goals;
+  const rows = source.slice(0, 14).map((item) => [item.name || "-", item.period || "-", item.type || "-", goalTargetLabel(item), item.expected || 0, item.current || 0, `${goalProgress(item)}%`]);
+  return reportSection(onlyRisk ? "Metas em risco" : "Metas", ["Meta", "Período", "Tipo", "Alvo", "Esperado", "Atual", "Progresso"], rows);
+}
 function reportSection(title, headers, rows) {
   const body = rows.length ? rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headers.length}">Sem registros essenciais para este relatório.</td></tr>`;
   return `<section class="report-section"><h2>${escapeHtml(title)}</h2><table><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></section>`;
@@ -3844,7 +4573,16 @@ function reportExportRows(filter = state.reportFilter) {
     state.data.plans.filter((plan) => plan.status !== "Inativo").forEach((plan) => map.set(plan.city || "Sem cidade", (map.get(plan.city || "Sem cidade") || 0) + 1));
     push("Planos por cidade", [...map.entries()].map(([city, total]) => [city, total]));
   }
-  return rows;
+  if (selected.has("commercialActions")) push("Ações comerciais", state.data.commercialActions.slice(0, 24).map((item) => [item.name || "-", fmtDate(item.startDate || item.date), actionLocation(item), item.type || "-", item.structure || "-", item.status || "Planejada"]));
+  if (selected.has("actionResults")) push("Realização das ações", state.data.actionResults.slice(0, 24).map((item) => [fmtDate(item.date), findById("commercialActions", item.actionId)?.name || item.actionName || "-", actionResultLocation(item), scheduleSellerNames(item).join(", ") || "-", item.movement || "-", Number(item.salesIdentified || 0)]));
+  if (selected.has("roadAreas")) push("Áreas de rua", state.data.roadAreas.slice(0, 24).map((item) => [item.name || "-", item.city || "-", item.neighborhood || "-", item.coverage || "-", item.potential || "-", item.status || "Ativa"]));
+  if (selected.has("materials")) push("Materiais", state.data.materials.slice(0, 24).map((item) => [item.name || "-", item.category || "-", item.quantity || 0, item.status || "Disponível", item.location || "-"]));
+  if (selected.has("materialIssues")) push("Materiais com restrição", state.data.materials.filter((item) => !materialAvailable(item)).slice(0, 24).map((item) => [item.name || "-", item.category || "-", item.quantity || 0, item.status || "Disponível", item.location || "-"]));
+  if (selected.has("marketingRequests")) push("Marketing", state.data.marketingRequests.slice(0, 24).map((item) => [item.title || item.requestNumber || "-", item.materialType || item.type || "-", fmtDate(item.neededDate), item.priority || "-", item.status || "Solicitação criada"]));
+  if (selected.has("internalDemands")) push("Demandas internas", state.data.internalDemands.slice(0, 24).map((item) => [item.title || item.number || "-", item.department || "-", fmtDate(item.nextCharge || item.requestedDeadline), item.priority || "-", item.status || "Solicitada", item.commercialImpact || "-"]));
+  if (selected.has("pendingItems")) push("Pendências", state.data.pendingItems.slice(0, 24).map((item) => [item.title || "-", item.category || "-", fmtDate(item.deadline), item.priority || "-", item.status || "Aberta", item.nextStep || "-"]));
+  if (selected.has("goals")) push("Metas", state.data.goals.slice(0, 24).map((item) => [item.name || "-", item.period || "-", item.type || "-", goalTargetLabel(item), item.expected || 0, item.current || 0, `${goalProgress(item)}%`]));
+  if (selected.has("goalRisks")) push("Metas em risco", state.data.goals.filter((item) => item.status === "Em risco" || goalProgress(item) < 60).slice(0, 24).map((item) => [item.name || "-", item.period || "-", item.type || "-", goalTargetLabel(item), item.expected || 0, item.current || 0, `${goalProgress(item)}%`]));  return rows;
 }
 
 function reportCards() {
@@ -3893,7 +4631,12 @@ function filteredWithPage(page, rows = state.data[page] || []) {
       const value = page === "sales" ? saleStatusLabel(item) : String(item.status || "");
       if (value !== filters.status) return false;
     }
-    if (filters.type && String(item.type || "") !== filters.type) return false;
+    if (filters.type && String(item.type || item.materialType || "") !== filters.type) return false;
+    if (filters.category && String(item.category || "") !== filters.category) return false;
+    if (filters.priority && String(item.priority || "") !== filters.priority) return false;
+    if (filters.potential && String(item.potential || "") !== filters.potential) return false;
+    if (filters.department && String(item.department || "") !== filters.department) return false;
+    if (filters.materialStatus && String(item.status || item.availability || "") !== filters.materialStatus) return false;
     if (filters.saleType && saleTypeLabel(item) !== filters.saleType) return false;
     if (filters.seller && !matchesSeller(item, filters.seller)) return false;
     if (filters.condo && !matchesCondo(item, filters.condo)) return false;
@@ -3932,7 +4675,11 @@ function upcomingEvents(all = false) {
   const today = todayISO();
   const visitEvents = state.data.visits.map((visit) => eventFromRef(`visits:${visit.id}`)).filter(Boolean);
   const expansionEvents = state.data.expansions.map((item) => eventFromRef(`expansions:${item.id}`)).filter(Boolean).filter((event) => event.date);
-  const rows = [...visitEvents, ...expansionEvents].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const actionEvents = state.data.commercialActions.map((item) => eventFromRef(`commercialActions:${item.id}`)).filter(Boolean).filter((event) => event.date);
+  const marketingEvents = state.data.marketingRequests.map((item) => eventFromRef(`marketingRequests:${item.id}`)).filter(Boolean).filter((event) => event.date);
+  const demandEvents = state.data.internalDemands.map((item) => eventFromRef(`internalDemands:${item.id}`)).filter(Boolean).filter((event) => event.date);
+  const pendingEvents = state.data.pendingItems.map((item) => eventFromRef(`pendingItems:${item.id}`)).filter(Boolean).filter((event) => event.date);
+  const rows = [...visitEvents, ...expansionEvents, ...actionEvents, ...marketingEvents, ...demandEvents, ...pendingEvents].sort((a, b) => String(a.date).localeCompare(String(b.date)));
   return all ? rows : rows.filter((event) => event.date && String(event.date).slice(0, 10) >= today && event.status !== "Concluida" && event.status !== "Concluido");
 }
 
@@ -3989,11 +4736,11 @@ function findById(collection, id) {
 }
 
 function labelFor(collection) {
-  return { condos: "condomínio", weeklySchedules: "programação", visits: "relacionamento", expansions: "demanda de expansão", sellers: "vendedor", sales: "venda", plans: "plano", users: "acesso" }[collection] || collection;
+  return { condos: "condomínio", weeklySchedules: "programação", visits: "relacionamento", expansions: "demanda de expansão", roadAreas: "área de rua", commercialActions: "ação comercial", actionResults: "realização da ação", materials: "material", marketingRequests: "solicitação ao marketing", internalDemands: "demanda interna", pendingItems: "pendência", goals: "meta", sellers: "vendedor", sales: "venda", plans: "plano", users: "acesso" }[collection] || collection;
 }
 
 function reportLabel(value) {
-  return { geral: "Geral", vendas: "Vendas", visitas: "Relacionamento", programacao: "Programação", expansao: "Expansão", condominios: "Condomínios", planos: "Planos" }[value] || value;
+  return { geral: "Geral", vendas: "Vendas", visitas: "Relacionamento", programacao: "Programação", operacao: "Operação externa", materiais: "Materiais", demandas: "Demandas e pendências", metas: "Metas", expansao: "Expansão", condominios: "Condomínios", planos: "Planos" }[value] || value;
 }
 
 function pageLabel(page) {
