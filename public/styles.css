@@ -1694,6 +1694,22 @@ body[data-theme="dark"] .history-card.danger span { background: #3b1614; color: 
 .modal-body { padding: 14px; display: grid; gap: 10px; }
 .form-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .form-grid .full { grid-column: 1 / -1; }
+.searchable-select {
+  display: grid;
+  gap: 7px;
+}
+.searchable-select .select-search {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 800;
+}
+.searchable-select select {
+  margin-top: 0;
+}
 .modal-message {
   margin: 0;
   color: var(--danger);

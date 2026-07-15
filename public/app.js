@@ -1911,7 +1911,7 @@ function formFields(collection, item = {}) {
       area("notes", "Observações", item.notes, "full")
     ],
     weeklySchedules: [
-      select("condoId", "Condomínio", condoOptions, item.condoId, "full"),
+      searchableSelect("condoId", "Condomínio", condoOptions, item.condoId, "full", "Pesquisar condomínio..."),
       input("address", "Endereço", item.address || findById("condos", item.condoId)?.address || "", "text", "full"),
       input("date", "Data", item.date || todayISO(), "date"),
       input("startTime", "Horário inicial", item.startTime || "09:00", "time"),
@@ -1925,7 +1925,7 @@ function formFields(collection, item = {}) {
       area("notes", "Orientações para a equipe", item.notes, "full")
     ],
     visits: [
-      select("condoId", "Condomínio", condoOptions, item.condoId, "full"),
+      searchableSelect("condoId", "Condomínio", condoOptions, item.condoId, "full", "Pesquisar condomínio..."),
       input("syndic", "Síndico", item.syndic || findById("condos", item.condoId)?.contactName || ""),
       input("managerCompany", "Administradora", item.managerCompany || findById("condos", item.condoId)?.managerCompany || ""),
       input("date", "Data e hora", item.date ? item.date.slice(0, 16) : "", "datetime-local"),
@@ -1943,7 +1943,7 @@ function formFields(collection, item = {}) {
       area("result", "Feedback / próximos passos", item.result, "full")
     ],
     expansions: [
-      select("condoId", "Condomínio cadastrado", condoOptions, item.condoId, "full"),
+      searchableSelect("condoId", "Condomínio cadastrado", condoOptions, item.condoId, "full", "Pesquisar condomínio..."),
       input("condoName", "Nome de condomínio", item.condoName, "text", "full"),
       input("address", "Endereço completo", item.address, "text", "full"),
       input("city", "Cidade", item.city),
@@ -2174,6 +2174,7 @@ function openForm(collection, item = {}) {
   const modal = $("#modalTemplate").content.firstElementChild.cloneNode(true);
   modal.querySelector("h3").textContent = `${item.id ? "Editar" : "Novo"} ${labelFor(collection)}`;
   modal.querySelector(".modal-body").innerHTML = `<div class="form-grid">${formFields(collection, item).join("")}</div><p class="modal-message" data-modal-message></p>`;
+  bindSearchableSelects(modal);
   modal.querySelectorAll(".close").forEach((button) => button.addEventListener("click", () => modal.remove()));
   if (collection === "weeklySchedules") hydrateScheduleForm(modal);
   modal.querySelector("form").addEventListener("submit", async (event) => {
@@ -2255,6 +2256,52 @@ function select(name, label, values, selected = "", klass = "") {
     return `<option value="${escapeHtml(id)}" ${String(id) === String(selected ?? "") ? "selected" : ""}>${escapeHtml(text)}</option>`;
   }).join("");
   return `<label class="${klass}">${label}<select name="${name}">${opts}</select></label>`;
+}
+
+function searchableSelect(name, label, values, selected = "", klass = "", placeholder = "Pesquisar...") {
+  const opts = values.map((value) => {
+    const id = typeof value === "object" ? value.id : value;
+    const text = typeof value === "object" ? value.name : value;
+    return `<option value="${escapeHtml(id)}" ${String(id) === String(selected ?? "") ? "selected" : ""}>${escapeHtml(text)}</option>`;
+  }).join("");
+  return `<label class="${klass} searchable-select">${label}<input class="select-search" type="search" placeholder="${escapeHtml(placeholder)}" autocomplete="off" data-select-filter><select name="${name}" data-searchable-select>${opts}</select><small class="field-hint">Digite para filtrar e selecione o condomínio na lista.</small></label>`;
+}
+
+function bindSearchableSelects(root = document) {
+  root.querySelectorAll("[data-select-filter]").forEach((input) => {
+    const wrapper = input.closest(".searchable-select");
+    const selectEl = wrapper?.querySelector("[data-searchable-select]");
+    if (!selectEl) return;
+    const applyFilter = () => {
+      const query = searchKey(input.value);
+      Array.from(selectEl.options).forEach((option) => {
+        const selected = String(option.value) === String(selectEl.value);
+        const baseOption = !option.value;
+        const match = !query || baseOption || selected || searchKey(option.textContent).includes(query);
+        option.hidden = !match;
+      });
+    };
+    input.addEventListener("input", applyFilter);
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      const firstVisible = Array.from(selectEl.options).find((option) => !option.hidden && option.value);
+      if (!firstVisible) return;
+      event.preventDefault();
+      selectEl.value = firstVisible.value;
+      selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+      input.value = firstVisible.textContent.trim();
+      applyFilter();
+    });
+    selectEl.addEventListener("change", () => {
+      input.value = "";
+      applyFilter();
+    });
+    applyFilter();
+  });
+}
+
+function searchKey(value) {
+  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 }
 
 function multiSelect(name, label, values, selected = [], klass = "") {
@@ -4765,7 +4812,7 @@ function relationshipStatuses() {
 }
 
 function expansionStatuses() {
-  return ["Em análise", "Agendado", "Em vistoria", "Em inspeção", "Aguardando aprovação", "Aprovado", "Reprovado", "Em implantação", "Concluído"];
+  return ["Em análise", "Projeto", "Agendado", "Em vistoria", "Em inspeção", "Aguardando aprovação", "Aprovado", "Reprovado", "Em implantação", "Concluído"];
 }
 
 function expansionTypes() {
