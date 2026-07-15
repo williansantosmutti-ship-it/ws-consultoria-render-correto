@@ -2259,44 +2259,53 @@ function select(name, label, values, selected = "", klass = "") {
 }
 
 function searchableSelect(name, label, values, selected = "", klass = "", placeholder = "Pesquisar...") {
-  const opts = values.map((value) => {
-    const id = typeof value === "object" ? value.id : value;
-    const text = typeof value === "object" ? value.name : value;
-    return `<option value="${escapeHtml(id)}" ${String(id) === String(selected ?? "") ? "selected" : ""}>${escapeHtml(text)}</option>`;
-  }).join("");
-  return `<label class="${klass} searchable-select">${label}<input class="select-search" type="search" placeholder="${escapeHtml(placeholder)}" autocomplete="off" data-select-filter><select name="${name}" data-searchable-select>${opts}</select><small class="field-hint">Digite para filtrar e selecione o condomínio na lista.</small></label>`;
+  const list = values.map((value) => ({
+    id: typeof value === "object" ? value.id : value,
+    text: typeof value === "object" ? value.name : value
+  }));
+  const selectedItem = list.find((item) => String(item.id) === String(selected ?? ""));
+  const optionsHtml = list.filter((item) => item.id).map((item) => `<button type="button" data-combo-option="${escapeHtml(item.id)}" data-label="${escapeHtml(item.text)}">${escapeHtml(item.text)}</button>`).join("");
+  return `<div class="${klass} searchable-select" data-searchable-select><label>${label}</label><input class="select-search" type="search" value="${escapeHtml(selectedItem?.text || "")}" placeholder="${escapeHtml(placeholder)}" autocomplete="off" data-select-filter><input type="hidden" name="${name}" value="${escapeHtml(selected ?? "")}" data-combo-value><div class="combo-options" data-combo-options>${optionsHtml}<span class="combo-empty">Nenhum condomínio encontrado.</span></div></div>`;
 }
 
 function bindSearchableSelects(root = document) {
-  root.querySelectorAll("[data-select-filter]").forEach((input) => {
-    const wrapper = input.closest(".searchable-select");
-    const selectEl = wrapper?.querySelector("[data-searchable-select]");
-    if (!selectEl) return;
+  root.querySelectorAll("[data-searchable-select]").forEach((wrapper) => {
+    const input = wrapper.querySelector("[data-select-filter]");
+    const hidden = wrapper.querySelector("[data-combo-value]");
+    const optionsBox = wrapper.querySelector("[data-combo-options]");
+    const buttons = Array.from(wrapper.querySelectorAll("[data-combo-option]"));
+    if (!input || !hidden || !optionsBox) return;
+    const choose = (button) => {
+      hidden.value = button?.dataset.comboOption || "";
+      input.value = button?.dataset.label || "";
+      optionsBox.classList.remove("open");
+      hidden.dispatchEvent(new Event("change", { bubbles: true }));
+    };
     const applyFilter = () => {
       const query = searchKey(input.value);
-      Array.from(selectEl.options).forEach((option) => {
-        const selected = String(option.value) === String(selectEl.value);
-        const baseOption = !option.value;
-        const match = !query || baseOption || selected || searchKey(option.textContent).includes(query);
-        option.hidden = !match;
+      let visible = 0;
+      buttons.forEach((button) => {
+        const match = !query || searchKey(button.dataset.label).includes(query);
+        button.hidden = !match;
+        if (match) visible += 1;
       });
+      optionsBox.classList.toggle("is-empty", visible === 0);
+      optionsBox.classList.toggle("open", Boolean(query) || document.activeElement === input);
     };
+    input.addEventListener("focus", applyFilter);
     input.addEventListener("input", applyFilter);
     input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") optionsBox.classList.remove("open");
       if (event.key !== "Enter") return;
-      const firstVisible = Array.from(selectEl.options).find((option) => !option.hidden && option.value);
+      const firstVisible = buttons.find((button) => !button.hidden);
       if (!firstVisible) return;
       event.preventDefault();
-      selectEl.value = firstVisible.value;
-      selectEl.dispatchEvent(new Event("change", { bubbles: true }));
-      input.value = firstVisible.textContent.trim();
-      applyFilter();
+      choose(firstVisible);
     });
-    selectEl.addEventListener("change", () => {
-      input.value = "";
-      applyFilter();
+    buttons.forEach((button) => button.addEventListener("click", () => choose(button)));
+    document.addEventListener("click", (event) => {
+      if (!wrapper.contains(event.target)) optionsBox.classList.remove("open");
     });
-    applyFilter();
   });
 }
 
@@ -2320,7 +2329,7 @@ function options(collection) {
 }
 
 function hydrateScheduleForm(modal) {
-  const condoSelect = modal.querySelector("select[name='condoId']");
+  const condoSelect = modal.querySelector("[name='condoId']");
   const dateInput = modal.querySelector("input[name='date']");
   const addressInput = modal.querySelector("input[name='address']");
   const helper = modal.querySelector("[data-schedule-helper]");
