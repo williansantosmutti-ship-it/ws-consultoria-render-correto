@@ -1294,7 +1294,7 @@ function expansions() {
   return `
     ${expansionMetrics(rows)}
     ${filterPanel("expansions", [
-      filterSelect("type", "Tipo da demanda", ["Vistoria", "Inspeção", "Implantação"]),
+      filterSelect("type", "Tipo da demanda", expansionTypes()),
       filterSelect("status", "Status", expansionStatuses()),
       filterSelect("seller", "Responsável", options("sellers").slice(1)),
       filterText("city", "Cidade"),
@@ -1569,8 +1569,8 @@ function expansionMetrics(rows) {
     ${metric("Vistorias pendentes", rows.filter((item) => item.type === "Vistoria" && !["Concluído", "Reprovado"].includes(item.status)).length)}
     ${metric("Inspeções pendentes", rows.filter((item) => item.type === "Inspeção" && !["Concluído", "Reprovado"].includes(item.status)).length)}
     ${metric("Implantações em andamento", rows.filter((item) => item.type === "Implantação" && item.status === "Em implantação").length)}
-    ${metric("Implantações concluídas", rows.filter((item) => item.type === "Implantação" && item.status === "Concluído").length)}
-    ${metric("Novos em prospecção", rows.filter((item) => item.status === "Em análise").length)}
+    ${metric("Ampliações abertas", rows.filter((item) => item.type === "Ampliação" && !["Concluído", "Reprovado"].includes(item.status)).length)}
+    ${metric("Projetos abertos", rows.filter((item) => item.type === "Projeto" && !["Concluído", "Reprovado"].includes(item.status)).length)}
   </div>`;
 }
 
@@ -1760,6 +1760,12 @@ function userActions(user) {
 }
 
 function bindPageEvents() {
+  document.querySelectorAll(".action-menu").forEach((menu) => menu.addEventListener("toggle", () => {
+    if (!menu.open) return;
+    document.querySelectorAll(".action-menu[open]").forEach((otherMenu) => {
+      if (otherMenu !== menu) otherMenu.removeAttribute("open");
+    });
+  }));
   document.querySelectorAll("[data-new]").forEach((button) => button.addEventListener("click", () => openForm(button.dataset.new)));
   document.querySelectorAll("[data-schedule-condo]").forEach((button) => button.addEventListener("click", () => openScheduleForCondo(button.dataset.scheduleCondo)));
   document.querySelectorAll("[data-edit]").forEach((button) => button.addEventListener("click", () => {
@@ -1940,7 +1946,7 @@ function formFields(collection, item = {}) {
       input("neighborhood", "Bairro", item.neighborhood),
       select("sellerId", "Responsável", sellerOptions, item.sellerId),
       input("protocol", "Protocolo no IXC", item.protocol),
-      select("type", "Tipo da demanda", ["Vistoria", "Inspeção", "Implantação"], item.type || "Vistoria"),
+      select("type", "Tipo da demanda", expansionTypes(), item.type || "Vistoria"),
       input("expectedDate", "Data prevista", item.expectedDate ? String(item.expectedDate).slice(0, 10) : "", "date"),
       input("doneDate", "Data realizada", item.doneDate ? String(item.doneDate).slice(0, 10) : "", "date"),
       input("date", "Agenda / prazo", item.date ? item.date.slice(0, 16) : "", "datetime-local"),
@@ -4753,6 +4759,10 @@ function relationshipStatuses() {
 
 function expansionStatuses() {
   return ["Em análise", "Agendado", "Em vistoria", "Em inspeção", "Aguardando aprovação", "Aprovado", "Reprovado", "Em implantação", "Concluído"];
+}
+
+function expansionTypes() {
+  return ["Vistoria", "Inspeção", "Implantação", "Ampliação", "Projeto"];
 }
 
 function agendaStatuses() {
