@@ -1,0 +1,18 @@
+name: Keep Render Awake
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping production health endpoint
+        run: |
+          curl --fail --silent --show-error --max-time 45 https://ws-consultoria.onrender.com/api/health
