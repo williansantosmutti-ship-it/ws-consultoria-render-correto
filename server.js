@@ -585,6 +585,27 @@ function classifySale(row, map) {
   return "Venda nova";
 }
 
+function hasInternetSaleText(value) {
+  const text = normalizeTextKey(value);
+  return /\b\d+\s*(MB|MBPS|MEGA|GB|GBPS)\b/.test(text) || text.includes("INTERNET") || text.includes("FIBRA");
+}
+
+function classifySale(row, map) {
+  const text = normalizeTextKey([
+    rowValue(row, map, ["tipo", "tipo venda", "tipo da venda", "categoria", "modalidade"]),
+    rowValue(row, map, ["produto", "servico", "serviÃ§o", "plano"]),
+    rowValue(row, map, ["status", "situacao", "situaÃ§Ã£o", "motivo"]),
+    rowValue(row, map, ["obs", "observacao", "observaÃ§Ã£o", "observacoes", "observaÃ§Ãµes"])
+  ].join(" "));
+  if (text.includes("CANCEL")) return "Cancelamento";
+  if (text.includes("REPETIDOR") || text.includes("EXTENSOR")) return "Repetidor de sinal";
+  if (text.includes("RENOVAC") || text.includes("RETENCAO")) return "Renovação";
+  if (text.includes("DOWNGRADE") || text.includes("DOWGRAD")) return "Downgrade";
+  if (text.includes("UPGRADE")) return "Upgrade";
+  if ((text.includes("FIXO") || text.includes("TELEFONIA") || text.includes("TELEFONE")) && !hasInternetSaleText(text)) return "Fixo";
+  return "Venda nova";
+}
+
 function normalizeSaleStatus(rawStatus, type) {
   const text = normalizeTextKey(`${rawStatus || ""} ${type || ""}`);
   if (text.includes("CANCEL")) return "Cancelada";
@@ -607,6 +628,16 @@ function scheduleRouteKey(item) {
 
 function saleExternalDeletedKey(externalKey) {
   return `sales:external:${String(externalKey || "").toLowerCase()}`;
+}
+
+function saleImportBaseKeyFromParts(date, sellerName, customer, planName) {
+  return [date, sellerFirstKey(sellerName), customer, planName].join("|").toLowerCase();
+}
+
+function saleImportBaseKey(sale) {
+  const parts = String(sale.externalKey || "").split("|");
+  if (parts.length >= 4) return parts.slice(0, 4).join("|").toLowerCase();
+  return saleImportBaseKeyFromParts(sale.date || "", sale.sellerName || "", sale.customer || "", sale.planName || "");
 }
 
 function saleImportKey(item) {
@@ -839,10 +870,11 @@ function importSalesRows(db, rows) {
     const type = classifySale(row, map);
     const rawStatus = rowValue(row, map, ["status", "situacao", "situação"]);
     if (!customer && !planName) continue;
-    const externalKey = [date, sellerFirstKey(sellerName), customer, planName, type].join("|").toLowerCase();
-    if (deletedRefExists(db, saleExternalDeletedKey(externalKey))) continue;
-    if (db.sales.some((sale) => sale.externalKey === externalKey)) continue;
-    db.sales.unshift({
+    const baseKey = saleImportBaseKeyFromParts(date, sellerName, customer, planName);
+    const externalKey = [baseKey, type].join("|").toLowerCase();
+    if (deletedRefExists(db, saleExternalDeletedKey(externalKey)) || deletedRefExists(db, saleExternalDeletedKey(baseKey))) continue;
+    const existing = db.sales.find((sale) => sale.externalKey === externalKey || saleImportBaseKey(sale) === baseKey);
+    const salePayload = {
       id: uid(),
       date,
       sellerId: findAllowedSellerId(db, sellerName),
@@ -860,7 +892,14 @@ function importSalesRows(db, rows) {
       externalKey,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    });
+    };
+    if (existing) {
+      if (existing.source === "Planilha online" || existing.externalKey) {
+        Object.assign(existing, { ...salePayload, id: existing.id, createdAt: existing.createdAt || salePayload.createdAt });
+      }
+      continue;
+    }
+    db.sales.unshift(salePayload);
     imported += 1;
   }
   return imported;
@@ -1344,7 +1383,10 @@ async function api(req, res) {
     if (!removed) return send(res, 404, { error: "Registro nao encontrado." });
     db[name] = db[name].filter((item) => item.id !== id);
     addDeletedRef(db, `${name}:id:${id}`, name, removed, user);
-    if (name === "sales") addDeletedRef(db, saleExternalDeletedKey(saleImportKey(removed)), name, removed, user);
+    if (name === "sales") {
+      addDeletedRef(db, saleExternalDeletedKey(saleImportKey(removed)), name, removed, user);
+      addDeletedRef(db, saleExternalDeletedKey(saleImportBaseKey(removed)), name, removed, user);
+    }
     if (name === "weeklySchedules" && isImportedSchedule(removed)) addDeletedRef(db, scheduleImportDeletedKey(removed), name, removed, user);
     addActivity(db, user, `Removeu ${name}`, removed.name || removed.title || removed.condoName || removed.customer || id);
     writeStore(db);

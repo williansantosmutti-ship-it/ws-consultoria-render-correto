@@ -35,6 +35,7 @@ const LOCAL_SNAPSHOT_KEY = "ws-consultoria-local-snapshot-v2";
 const LOCAL_MIRROR_COLLECTIONS = ["sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "roadAreas", "commercialActions", "actionResults", "materials", "marketingRequests", "internalDemands", "pendingItems", "goals", "deletedRefs"];
 const COMMERCIAL_SELLER_KEYS = new Set(["IVAN", "LUISE", "ISIS", "BRUNA", "ADRIELE"]);
 let salesAutoTimer = null;
+let dailyRoutineSyncing = false;
 
 const mapState = {
   files: [],
@@ -153,6 +154,7 @@ async function boot() {
     state.user = session.user;
     state.settings = session.settings;
     await loadAll();
+    await ensureDailyRoutineTasks({ silent: true });
     showApp();
   } catch {
     $("#login").classList.remove("hidden");
@@ -174,6 +176,7 @@ async function login(event) {
     state.user = session.user;
     state.settings = session.settings;
     await loadAll();
+    await ensureDailyRoutineTasks({ silent: true });
     showApp();
   } catch (error) {
     $("#loginMessage").textContent = error.message;
@@ -548,6 +551,38 @@ function dailyRoutinePanel() {
   </section>`;
 }
 
+function dailyRoutinePanel() {
+  const today = todayISO();
+  const allToday = (state.data.pendingItems || [])
+    .filter((item) => item.category === "Rotina do supervisor" && String(item.deadline || "").slice(0, 10) === today);
+  const openToday = allToday
+    .filter((item) => !closedStatuses().includes(item.status || ""))
+    .sort((a, b) => String(a.priority || "").localeCompare(String(b.priority || "")));
+  const existingKeys = new Set(allToday.map((item) => item.routineKey || normalizeKey(item.title)));
+  const suggestions = dailyRoutineSuggestions().filter((item) => !existingKeys.has(item.key));
+  return `<section class="card daily-routine-card">
+    <div class="section-head">
+      <div>
+        <h3>Obrigações do dia</h3>
+        <small>Roteiro automático do supervisor, atualizado conforme os dados do sistema.</small>
+      </div>
+      <button class="primary" data-create-daily-routine>Atualizar rotina</button>
+    </div>
+    ${openToday.length ? `<div class="routine-today">
+      <h4>Tarefas abertas hoje</h4>
+      ${table(["Tarefa", "Prioridade", "Status"], openToday.map((item) => [item.title || "-", item.priority || "-", status(item.status || "Aberta")]))}
+    </div>` : `<p class="hint">Nenhuma obrigação aberta para hoje. As tarefas concluídas somem desta visão automaticamente.</p>`}
+    ${suggestions.length ? `<div class="routine-grid">
+      ${suggestions.map((item) => `<article class="routine-item ${escapeHtml((item.priority || "").toLowerCase())}">
+        <span>${escapeHtml(item.priority || "Média")}</span>
+        <strong>${escapeHtml(item.title)}</strong>
+        <small>${escapeHtml(item.note || "")}</small>
+        <button class="secondary" data-page-jump="${item.page || "pendingItems"}">${escapeHtml(item.action || "Abrir área")}</button>
+      </article>`).join("")}
+    </div>` : ""}
+  </section>`;
+}
+
 function dailyRoutineSuggestions() {
   const today = todayISO();
   const month = today.slice(0, 7);
@@ -563,7 +598,7 @@ function dailyRoutineSuggestions() {
   ];
   const ranking = sellerRanking();
   const sellersWithoutSale = visibleCommercialSellers().filter((seller) => {
-    const count = validInternetSalesRows(visibleSalesRows()).filter((sale) => sale.sellerId === seller.id && String(sale.date || "").startsWith(month)).length;
+    const count = validInternetSalesRows(visibleSalesRows()).filter((sale) => saleMatchesSeller(sale, seller) && String(sale.date || "").startsWith(month)).length;
     return count === 0;
   });
   const recentSupervisorVisits = state.data.visits.filter((visit) => {
@@ -680,6 +715,44 @@ async function createDailyRoutineTasks() {
     });
   }
   await loadAll();
+  render();
+}
+
+async function ensureDailyRoutineTasks(options = {}) {
+  if (dailyRoutineSyncing || !state.user) return 0;
+  dailyRoutineSyncing = true;
+  try {
+    const today = todayISO();
+    const existing = new Set((state.data.pendingItems || [])
+      .filter((item) => item.category === "Rotina do supervisor" && String(item.deadline || "").slice(0, 10) === today)
+      .map((item) => item.routineKey || normalizeKey(item.title)));
+    const items = dailyRoutineSuggestions().filter((item) => !existing.has(item.key));
+    for (const item of items) {
+      await request("/api/pendingItems", {
+        method: "POST",
+        body: {
+          title: item.title,
+          category: "Rotina do supervisor",
+          priority: item.priority,
+          status: "Aberta",
+          deadline: today,
+          responsible: state.user?.name || "Supervisor",
+          sourcePage: item.page,
+          routineKey: item.key,
+          notes: `${item.note || ""}\nAção sugerida: ${item.action || ""}`.trim()
+        }
+      });
+    }
+    if (items.length) await loadAll();
+    return items.length;
+  } finally {
+    dailyRoutineSyncing = false;
+  }
+}
+
+async function createDailyRoutineTasks() {
+  const created = await ensureDailyRoutineTasks({ silent: false });
+  if (!created) alert("As obrigações de hoje já estão atualizadas.");
   render();
 }
 
@@ -1852,6 +1925,10 @@ function saleSellerName(sale) {
   return findById("sellers", sale.sellerId)?.name || sale.sellerName || sellerNameFromExternalKey(sale) || "";
 }
 
+function saleMatchesSeller(sale, seller) {
+  return String(sale.sellerId || "") === String(seller.id || "") || firstNameKey(saleSellerName(sale)) === firstNameKey(seller.name);
+}
+
 function visibleSalesRows(rows = state.data.sales) {
   return rows.filter((sale) => COMMERCIAL_SELLER_KEYS.has(firstNameKey(saleSellerName(sale))));
 }
@@ -1903,6 +1980,32 @@ function validInternetSalesRows(rows = visibleSalesRows()) {
   return rows.filter(isInternetSale);
 }
 
+function hasInternetPlanText(value) {
+  const text = normalizeKey(value);
+  return /\b\d+\s*(MB|MBPS|MEGA|GB|GBPS)\b/.test(text) || text.includes("INTERNET") || text.includes("FIBRA");
+}
+
+function saleTypeLabel(sale) {
+  const raw = sale.type || sale.saleType || sale.category || "";
+  const rawText = normalizeKey(raw);
+  const text = normalizeKey([raw, sale.planName, sale.notes, sale.status].filter(Boolean).join(" "));
+  if (text.includes("CANCEL")) return "Cancelamento";
+  if (text.includes("REPETIDOR") || text.includes("EXTENSOR")) return "Repetidor de sinal";
+  if (text.includes("RENOVAC") || text.includes("RETENCAO")) return "Renovação";
+  if (text.includes("DOWNGRADE") || text.includes("DOWGRAD")) return "Downgrade";
+  if (text.includes("UPGRADE")) return "Upgrade";
+  if ((text.includes("FIXO") || text.includes("TELEFONIA") || text.includes("TELEFONE")) && !hasInternetPlanText(text)) return "Fixo";
+  if (hasInternetPlanText(text) && (rawText.includes("FIXO") || rawText.includes("TELEFONIA") || rawText.includes("TELEFONE"))) return "Venda nova";
+  if (rawText.includes("VENDA")) return "Venda nova";
+  return raw || "Venda nova";
+}
+
+function isInternetSale(sale) {
+  if (saleStatusLabel(sale) === "Cancelada") return false;
+  if (saleValue(sale) <= 0) return false;
+  return saleTypeLabel(sale) === "Venda nova";
+}
+
 function saleStatusLabel(sale) {
   const text = normalizeKey([sale.status, sale.type, sale.saleType].filter(Boolean).join(" "));
   if (text.includes("CANCEL")) return "Cancelada";
@@ -1937,7 +2040,7 @@ function salesMetrics(rows) {
 }
 
 function sellerPanel(seller, monthSales) {
-  const sellerRows = monthSales.filter((sale) => sale.sellerId === seller.id);
+  const sellerRows = monthSales.filter((sale) => saleMatchesSeller(sale, seller));
   const rows = validInternetSalesRows(sellerRows);
   const repeaters = sellerRows.filter((sale) => saleTypeLabel(sale) === "Repetidor de sinal").length;
   const fixed = sellerRows.filter((sale) => saleTypeLabel(sale) === "Fixo").length;
@@ -3303,6 +3406,7 @@ async function importSales(options = {}) {
     const result = await request("/api/sales/import", { method: "POST", body: { url, silent } });
     if (!silent) alert(`${result.imported} venda(s) importada(s).`);
     await loadAll();
+    await ensureDailyRoutineTasks({ silent: true });
     if (!silent || (["sales", "sellers", "dashboard", "reports"].includes(state.page) && !document.querySelector(".modal-backdrop"))) render();
   } catch (error) {
     if (!silent) alert(error.message);
@@ -5321,7 +5425,7 @@ function sellerRanking() {
   const month = new Date().toISOString().slice(0, 7);
   const visibleSales = validInternetSalesRows(visibleSalesRows());
   return visibleCommercialSellers().map((seller) => {
-    const sales = visibleSales.filter((sale) => sale.sellerId === seller.id && String(sale.date || "").startsWith(month));
+    const sales = visibleSales.filter((sale) => saleMatchesSeller(sale, seller) && String(sale.date || "").startsWith(month));
     const conversion = seller.goal ? Math.round((sales.length / Number(seller.goal || 1)) * 100) : 0;
     return { id: seller.id, name: seller.name, count: sales.length, value: sales.reduce((sum, sale) => sum + saleValue(sale), 0), conversion };
   }).sort((a, b) => b.count - a.count || b.value - a.value);
