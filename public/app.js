@@ -733,6 +733,11 @@ function capacityCell(item) {
   return `<div class="capacity-cell">${value}<small>${escapeHtml(statusLabel)}${confidence ? ` | ${confidence}` : ""}${checked ? ` | ${checked}` : ""}${source ? ` | ${source}` : ""}</small></div>`;
 }
 
+function capacityNumber(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const match = String(value || "").replace(/\./g, "").match(/\b([1-9][0-9]{0,4})\b/);
+  return match ? Number(match[1]) : 0;
+}
 function condoVisitSummary(condoId) {
   const records = [];
   state.data.weeklySchedules.forEach((item) => {
@@ -4381,7 +4386,7 @@ function reportMetricRows(filter = state.reportFilter) {
     demandas: [["Marketing", state.data.marketingRequests.length], ["Demandas internas", state.data.internalDemands.length], ["Pendências", state.data.pendingItems.length], ["Atrasadas", [...state.data.marketingRequests, ...state.data.internalDemands, ...state.data.pendingItems].filter((item) => isOverdue(item.neededDate || item.nextCharge || item.requestedDeadline || item.deadline, item.status)).length]],
     metas: [["Metas cadastradas", state.data.goals.length], ["Atingidas", state.data.goals.filter((item) => ["Atingida", "Superada"].includes(item.status)).length], ["Em risco", state.data.goals.filter((item) => item.status === "Em risco").length], ["Progresso médio", `${averageGoalProgress(state.data.goals)}%`]],
     expansao: [["Demandas", state.data.expansions.length], ["Abertas", openExpansions], ["Aprovadas", state.data.expansions.filter((item) => item.status === "Aprovado").length], ["Concluídas", state.data.expansions.filter((item) => item.status === "Concluído").length]],
-    condominios: [["Condomínios", state.data.condos.length], ["Ativos", activeCondos.length], ["Cidades", new Set(state.data.condos.map((condo) => condo.city).filter(Boolean)).size], ["Unidades", state.data.condos.reduce((sum, condo) => sum + Number(condo.capacity || 0), 0)]],
+    condominios: [["Condomínios", state.data.condos.length], ["Ativos", activeCondos.length], ["Cidades", new Set(state.data.condos.map((condo) => condo.city).filter(Boolean)).size], ["Unidades", state.data.condos.reduce((sum, condo) => sum + capacityNumber(condo.capacity), 0)]],
     planos: [["Planos ativos", activePlans.length], ["Promocionais", state.data.plans.filter((plan) => plan.status === "Promocional").length], ["Valor médio", money(activePlans.length ? activePlans.reduce((sum, plan) => sum + Number(plan.price || 0), 0) / activePlans.length : 0)], ["Cidades atendidas", new Set(activePlans.map((plan) => plan.city).filter(Boolean)).size]],
     geral: [["Vendas no mês", salesMonth.length], ["Receita do mês", money(revenue)], ["Relacionamentos abertos", openVisits], ["Ações abertas", state.data.commercialActions.filter((item) => !closedStatuses().includes(item.status)).length]]
   };
@@ -5011,7 +5016,7 @@ function filteredWithPage(page, rows = state.data[page] || []) {
       if (value !== filters.status) return false;
     }
     if (filters.capacityPresence) {
-      const hasCapacity = Number(item.capacity || 0) > 0;
+      const hasCapacity = capacityNumber(item.capacity) > 0;
       if (filters.capacityPresence === "with" && !hasCapacity) return false;
       if (filters.capacityPresence === "without" && hasCapacity) return false;
     }
