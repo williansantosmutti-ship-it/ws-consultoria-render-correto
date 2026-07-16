@@ -1017,10 +1017,11 @@ function shouldReplaceCapacity(condo, evidence) {
 }
 
 async function researchCondoCapacities(db, user, options = {}) {
-  if (capacityResearchRunning) return { running: true, checked: 0, updated: 0, pending: 0, skipped: 0, errors: 0, items: [] };
-  capacityResearchRunning = true;
+  const manageLock = options.manageLock !== false;
+  if (manageLock && capacityResearchRunning) return { running: true, checked: 0, updated: 0, pending: 0, skipped: 0, errors: 0, items: [] };
+  if (manageLock) capacityResearchRunning = true;
   const now = new Date().toISOString();
-  const limit = Math.max(1, Math.min(Number(options.limit || 120), 300));
+  const limit = Math.max(1, Math.min(Number(options.limit || 300), 300));
   const force = parseBoolean(options.force, false);
   const candidates = db.condos
     .filter((condo) => !condo.deleted)
@@ -1068,15 +1069,41 @@ async function researchCondoCapacities(db, user, options = {}) {
     addActivity(db, user || { name: "Sistema" }, "Pesquisou capacidade dos condomínios", db.settings.capacityResearchStatus);
     return result;
   } finally {
-    capacityResearchRunning = false;
+    if (manageLock) capacityResearchRunning = false;
   }
 }
 
 async function runAutomaticCapacityResearch() {
   const db = ensureShape(readStore());
-  const result = await researchCondoCapacities(db, { name: "Sistema" }, { limit: 80 });
+  const result = await researchCondoCapacities(db, { name: "Sistema" }, { limit: 300 });
   if (!result.running) writeStore(db);
   return result;
+}
+
+function queueCapacityResearch(user, options = {}) {
+  if (capacityResearchRunning) return { running: true, started: false };
+  capacityResearchRunning = true;
+  const db = ensureShape(readStore());
+  db.settings.capacityResearchAt = new Date().toISOString();
+  db.settings.capacityResearchStatus = "Pesquisa de capacidade iniciada em segundo plano";
+  writeStore(db);
+  setTimeout(async () => {
+    try {
+      const latest = ensureShape(readStore());
+      const result = await researchCondoCapacities(latest, user || { name: "Sistema" }, { ...options, limit: 300, manageLock: false });
+      latest.settings.capacityResearchAt = new Date().toISOString();
+      latest.settings.capacityResearchStatus = `${result.updated} atualizado(s), ${result.pending} pendente(s), ${result.errors} erro(s)`;
+      writeStore(latest);
+    } catch (error) {
+      const latest = ensureShape(readStore());
+      latest.settings.capacityResearchAt = new Date().toISOString();
+      latest.settings.capacityResearchStatus = `Erro na pesquisa: ${error.message}`;
+      writeStore(latest);
+    } finally {
+      capacityResearchRunning = false;
+    }
+  }, 20).unref?.();
+  return { running: false, started: true };
 }
 
 async function api(req, res) {
@@ -1170,6 +1197,7 @@ async function api(req, res) {
     const user = requireAuth(req, res);
     if (!user) return;
     const body = await getBody(req);
+    if (body?.background) return send(res, 202, queueCapacityResearch(user, body));
     const db = ensureShape(readStore());
     const result = await researchCondoCapacities(db, user, body || {});
     if (!result.running) writeStore(db);
@@ -1180,6 +1208,7 @@ async function api(req, res) {
     const token = req.headers["x-automation-token"] || url.searchParams.get("token");
     if (!CAPACITY_RESEARCH_TOKEN || token !== CAPACITY_RESEARCH_TOKEN) return send(res, 403, { error: "Token da automacao invalido ou nao configurado." });
     const body = await getBody(req);
+    if (body?.background) return send(res, 202, queueCapacityResearch({ name: "Automacao" }, body));
     const db = ensureShape(readStore());
     const result = await researchCondoCapacities(db, { name: "Automacao" }, body || {});
     if (!result.running) writeStore(db);

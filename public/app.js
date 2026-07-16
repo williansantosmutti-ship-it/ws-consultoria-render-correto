@@ -702,6 +702,7 @@ function condos() {
   const verified = state.data.condos.filter((item) => item.capacity && String(item.capacityStatus || "").toLowerCase() === "verificada").length;
   const pending = state.data.condos.filter((item) => !item.capacity || /pendente|erro/i.test(String(item.capacityStatus || ""))).length;
   const lastResearch = state.settings.capacityResearchAt ? fmtDateTime(state.settings.capacityResearchAt) : "Nunca executada";
+  const researchStatus = state.settings.capacityResearchStatus || "Aguardando primeira pesquisa";
   return `
     <section class="card capacity-research-card">
       <div>
@@ -713,6 +714,7 @@ function condos() {
         <span><strong>${verified}</strong> verificadas</span>
         <span><strong>${pending}</strong> pendentes</span>
         <small>Última pesquisa: ${escapeHtml(lastResearch)}</small>
+        <small>Status: ${escapeHtml(researchStatus)}</small>
       </div>
       <div class="toolbar">
         <button class="primary" data-research-capacity>Pesquisar capacidades online</button>
@@ -3097,8 +3099,7 @@ async function importSalesText() {
 async function researchCondoCapacities() {
   const total = state.data.condos.length;
   if (!total) return alert("Cadastre os condomínios antes de pesquisar a capacidade.");
-  const force = confirm("Pesquisar capacidade online para todos os condomínios sem capacidade verificada?\n\nClique em OK para pesquisar apenas pendentes. Clique em Cancelar se quiser revisar manualmente antes.");
-  if (!force) return;
+  if (!confirm("Iniciar pesquisa online em segundo plano para todos os condomínios sem capacidade verificada?")) return;
   const button = $("[data-research-capacity]");
   const original = button?.textContent;
   if (button) {
@@ -3106,17 +3107,11 @@ async function researchCondoCapacities() {
     button.textContent = "Pesquisando...";
   }
   try {
-    const result = await request("/api/condos/research-capacity", { method: "POST", body: { limit: 120 } });
+    const result = await request("/api/condos/research-capacity", { method: "POST", body: { limit: 300, background: true } });
     await loadAll();
     render();
     if (result.running) return alert("Já existe uma pesquisa de capacidade em andamento. Aguarde finalizar.");
-    alert([
-      "Pesquisa concluída.",
-      `${result.updated || 0} condomínio(s) atualizado(s).`,
-      `${result.pending || 0} pendente(s) de validação.`,
-      `${result.errors || 0} erro(s).`,
-      result.remaining ? `${result.remaining} ainda precisam de verificação.` : "Todos os elegíveis foram processados."
-    ].join("\n"));
+    alert("Pesquisa iniciada em segundo plano. Você pode continuar usando o sistema e voltar em alguns minutos para conferir os resultados.");
   } catch (error) {
     alert(error.message || "Não foi possível pesquisar as capacidades agora.");
   } finally {
