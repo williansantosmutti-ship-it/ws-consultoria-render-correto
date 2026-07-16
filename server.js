@@ -856,7 +856,7 @@ async function api(req, res) {
   const method = req.method;
 
   if (url.pathname === "/api/health") {
-    return send(res, 200, { ok: true, name: "WS CONSULTORIA", time: new Date().toISOString(), storage: storageInfo() });
+    return send(res, 200, { ok: true, name: "WS CONSULTORIA", time: new Date().toISOString() });
   }
 
   if (url.pathname === "/api/login" && method === "POST") {
@@ -901,7 +901,7 @@ async function api(req, res) {
     const user = requireAuth(req, res);
     if (!user) return;
     const db = ensureShape(readStore());
-    return send(res, 200, { ...db, settings: cleanSettings(db.settings), users: db.users.map(cleanUser) });
+    return send(res, 200, { ...db, settings: cleanSettings(db.settings), users: db.users.map(cleanUser), system: { storage: storageInfo() } });
   }
 
   if (url.pathname === "/api/local-restore" && method === "POST") {

@@ -1,6 +1,7 @@
 const state = {
   user: null,
   settings: {},
+  system: {},
   data: {},
   page: "dashboard",
   query: "",
@@ -87,6 +88,7 @@ const menu = [
     id: "admin",
     label: "Administração",
     items: [
+      ["tutorial", "Guia do sistema"],
       ["reports", "Relatórios"],
       ["backup", "Backup"],
       ["logs", "Histórico"],
@@ -190,6 +192,7 @@ async function loadAll() {
   const restored = await restoreLocalSnapshotIfNeeded(serverData);
   state.data = restored ? ensureClientShape(await request("/api/all", { silent: true })) : serverData;
   state.settings = state.data.settings;
+  state.system = state.data.system || {};
   saveLocalSnapshot();
   await loadMapLayers();
 }
@@ -201,6 +204,7 @@ function ensureClientShape(data) {
   for (const key of ["condos", "visits", "sellers", "sales", "plans", "expansions", "weeklySchedules", "roadAreas", "commercialActions", "actionResults", "materials", "marketingRequests", "internalDemands", "pendingItems", "goals", "activities", "users", "deletedRefs"]) {
     if (!Array.isArray(shaped[key])) shaped[key] = [];
   }
+  shaped.system = shaped.system || {};
   return shaped;
 }
 
@@ -228,11 +232,20 @@ function saveLocalSnapshot() {
 
 function localSnapshotShouldRestore(serverData, snapshot) {
   if (!snapshot?.data) return false;
+  if (localSnapshotHasMissingRows(serverData, snapshot.data)) return true;
   const localSchedules = activeLocalCount(snapshot.data, "weeklySchedules");
   const serverSchedules = activeLocalCount(serverData, "weeklySchedules");
   const localOperational = LOCAL_MIRROR_COLLECTIONS.filter((key) => key !== "deletedRefs").reduce((sum, key) => sum + activeLocalCount(snapshot.data, key), 0);
   const serverOperational = LOCAL_MIRROR_COLLECTIONS.filter((key) => key !== "deletedRefs").reduce((sum, key) => sum + activeLocalCount(serverData, key), 0);
-  return localSchedules > serverSchedules || localOperational >= serverOperational + 5;
+  return localSchedules > serverSchedules || localOperational > serverOperational;
+}
+
+function localSnapshotHasMissingRows(serverData, localData) {
+  const deleted = new Set([...(serverData.deletedRefs || []), ...(localData.deletedRefs || [])].map((ref) => ref.key).filter(Boolean));
+  return LOCAL_MIRROR_COLLECTIONS.filter((key) => key !== "deletedRefs").some((collection) => {
+    const serverIds = new Set((serverData[collection] || []).map((item) => item?.id).filter(Boolean));
+    return (localData[collection] || []).some((item) => item?.id && !deleted.has(`${collection}:id:${item.id}`) && !serverIds.has(item.id));
+  });
 }
 
 function activeLocalCount(data, collection) {
@@ -309,7 +322,7 @@ function render() {
   applyTheme();
   renderReminderBadge();
   renderReminderDrawer();
-  const views = { dashboard, agenda, condos, weeklySchedules, coverageMap, visits, expansions, roadAreas, commercialActions, actionResults, materials, marketingRequests, internalDemands, pendingItems, goals, sellers, sales, plans, reports, backup, logs, users, settings };
+  const views = { dashboard, agenda, condos, weeklySchedules, coverageMap, visits, expansions, roadAreas, commercialActions, actionResults, materials, marketingRequests, internalDemands, pendingItems, goals, sellers, sales, plans, tutorial, reports, backup, logs, users, settings };
   $("#content").innerHTML = views[state.page]();
   bindPageEvents();
 }
@@ -479,6 +492,7 @@ function summaryDashboard() {
         <button class="primary" data-new="weeklySchedules">Programar equipe</button>
         <button class="secondary" data-new="sales">Lançar venda</button>
         <button class="secondary" data-new="visits">Agendar visita</button>
+        <button class="secondary" data-page-jump="tutorial">Guia rápido</button>
       </div>
     </section>
     <div class="grid cols-4">
@@ -1432,6 +1446,67 @@ function reports() {
     ${reportPreview()}`;
 }
 
+
+function tutorial() {
+  const sampleCount = sampleRecordsCount();
+  return `
+    <section class="tutorial-hero">
+      <div>
+        <span>Comece por aqui</span>
+        <h3>Guia prático do controle comercial</h3>
+        <p>Use esta área para entender o que cada módulo faz, qual rotina seguir e como os registros se conectam entre condomínio, programação, visita, expansão, vendas e relatórios.</p>
+      </div>
+      <div class="hero-actions">
+        <button class="primary" data-create-examples>Criar exemplos</button>
+        <button class="secondary" data-remove-examples ${sampleCount ? "" : "disabled"}>Remover exemplos</button>
+      </div>
+    </section>
+    <div class="grid cols-4">
+      ${metric("Exemplos ativos", sampleCount)}
+      ${metric("Condomínios", state.data.condos.length)}
+      ${metric("Programações", state.data.weeklySchedules.length)}
+      ${metric("Vendas", visibleSalesRows().length)}
+    </div>
+    <section class="card">
+      <div class="section-head"><h3>Fluxo recomendado</h3><small>Ordem simples para o dia a dia</small></div>
+      <div class="workflow-list">
+        <span><strong>1</strong> Cadastre ou revise o condomínio.</span>
+        <span><strong>2</strong> Crie relacionamento, visita ou demanda de expansão.</span>
+        <span><strong>3</strong> Monte a programação semanal da equipe.</span>
+        <span><strong>4</strong> Registre ação realizada, retorno e próxima visita.</span>
+        <span><strong>5</strong> Acompanhe vendas, metas e relatórios.</span>
+      </div>
+    </section>
+    <div class="tutorial-grid">
+      ${tutorialAreas().map((area) => `<article class="tutorial-card">
+        <div><strong>${escapeHtml(area.title)}</strong><small>${escapeHtml(area.where)}</small></div>
+        <p>${escapeHtml(area.description)}</p>
+        <ul>${area.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join("")}</ul>
+        <button class="secondary" data-page-jump="${area.page}">Abrir área</button>
+      </article>`).join("")}
+    </div>`;
+}
+
+function tutorialAreas() {
+  return [
+    { page: "dashboard", title: "Painel", where: "Visão geral", description: "Mostra prioridades, alertas, próximas atividades e desempenho comercial.", steps: ["Veja o que exige ação hoje.", "Use os atalhos para programar equipe, venda ou visita.", "Acompanhe ranking e atividades futuras."] },
+    { page: "condos", title: "Condomínios", where: "Cadastro mestre", description: "Base principal para endereço, síndico, administradora, cidade, bairro e capacidade.", steps: ["Cadastre antes de programar visitas.", "Mantenha endereço completo.", "Use status para separar ativos, pendentes e inativos."] },
+    { page: "weeklySchedules", title: "Programação semanal", where: "Equipe externa", description: "Organiza a semana por condomínio, consultores, horário e orientação de atuação.", steps: ["Selecione o condomínio cadastrado.", "O endereço será preenchido automaticamente.", "Baixe PDF ou envie agenda para a equipe."] },
+    { page: "visits", title: "Relacionamento", where: "Síndicos e administradoras", description: "Controla visita, cupom, feedback, relacionamento e próxima visita.", steps: ["Registre o que ocorreu na visita.", "Marque próxima visita.", "Use os indicadores para condomínios sem retorno."] },
+    { page: "expansions", title: "Expansão", where: "Vistoria, projeto e implantação", description: "Acompanha novas demandas técnicas e comerciais da rede.", steps: ["Use tipo: vistoria, inspeção, implantação, ampliação ou projeto.", "Atualize status e datas.", "Vincule ao condomínio para preencher endereço."] },
+    { page: "commercialActions", title: "Ações comerciais", where: "Operação externa", description: "Planeja ações de rua, campanhas, materiais, estrutura e equipe.", steps: ["Escolha condomínio ou área de rua.", "Defina campanha, meta e vendedores.", "Depois registre a realização da ação."] },
+    { page: "sales", title: "Vendas", where: "Apuração comercial", description: "Centraliza vendas dos consultores, valores, tipo da venda e status.", steps: ["Importe a planilha online.", "Confira apenas os vendedores da equipe.", "Use relatórios para apuração mensal."] },
+    { page: "reports", title: "Relatórios", where: "Administração", description: "Gera PDF, Excel e resumos por área, sem puxar informação desnecessária.", steps: ["Escolha a área.", "Marque os blocos necessários.", "Exporte no formato desejado."] },
+    { page: "backup", title: "Backup", where: "Proteção dos dados", description: "Exporta uma cópia completa e mostra se o armazenamento do servidor é persistente.", steps: ["Baixe JSON periodicamente.", "Confira o status de persistência.", "Guarde uma cópia segura."] }
+  ];
+}
+
+const SAMPLE_COLLECTIONS = ["sales", "actionResults", "commercialActions", "weeklySchedules", "visits", "expansions", "roadAreas", "materials", "marketingRequests", "internalDemands", "pendingItems", "goals", "plans", "condos"];
+
+function sampleRecordsCount() {
+  return SAMPLE_COLLECTIONS.reduce((sum, collection) => sum + (state.data[collection] || []).filter((item) => item.sample === true).length, 0);
+}
+
 function backup() {
   const content = JSON.stringify(state.data, null, 2);
   const sizeKb = Math.max(1, Math.round(new Blob([content]).size / 1024));
@@ -1452,6 +1527,7 @@ function backup() {
       ${metric("Registros totais", collections.reduce((sum, row) => sum + Number(row[1] || 0), 0))}
       ${metric("Última geração", fmtDateTime(new Date().toISOString()))}
     </div>
+    ${storageStatusCard()}
     <section class="card backup-panel">
       <div class="section-head">
         <div>
@@ -1771,6 +1847,8 @@ function bindPageEvents() {
     });
   }));
   document.querySelectorAll("[data-new]").forEach((button) => button.addEventListener("click", () => openForm(button.dataset.new)));
+  $("[data-create-examples]")?.addEventListener("click", createTutorialExamples);
+  $("[data-remove-examples]")?.addEventListener("click", removeTutorialExamples);
   document.querySelectorAll("[data-schedule-condo]").forEach((button) => button.addEventListener("click", () => openScheduleForCondo(button.dataset.scheduleCondo)));
   document.querySelectorAll("[data-edit]").forEach((button) => button.addEventListener("click", () => {
     const [collection, id] = button.dataset.edit.split(":");
@@ -2009,7 +2087,7 @@ function formFields(collection, item = {}) {
     ],
     commercialActions: [
       input("name", "Nome da ação", item.name, "text", "full"),
-      select("condoId", "Condomínio", condoOptions, item.condoId),
+      searchableSelect("condoId", "Condomínio", condoOptions, item.condoId, "", "Pesquisar condomínio..."),
       select("roadAreaId", "Área de rua", roadAreaOptions, item.roadAreaId),
       input("region", "Região", item.region),
       input("campaign", "Campanha", item.campaign),
@@ -2038,7 +2116,7 @@ function formFields(collection, item = {}) {
     actionResults: [
       select("actionId", "Ação comercial", actionOptions, item.actionId, "full"),
       select("scheduleId", "Programação relacionada", scheduleOptions, item.scheduleId, "full"),
-      select("condoId", "Condomínio", condoOptions, item.condoId),
+      searchableSelect("condoId", "Condomínio", condoOptions, item.condoId, "", "Pesquisar condomínio..."),
       select("roadAreaId", "Área de rua", roadAreaOptions, item.roadAreaId),
       select("realized", "Ação realizada", ["Sim", "Parcial", "Não"], item.realized || "Sim"),
       input("date", "Data real", item.date || todayISO(), "date"),
@@ -2080,7 +2158,7 @@ function formFields(collection, item = {}) {
     marketingRequests: [
       input("requestNumber", "Número da solicitação", item.requestNumber),
       input("title", "Título", item.title, "text", "full"),
-      select("condoId", "Condomínio", condoOptions, item.condoId),
+      searchableSelect("condoId", "Condomínio", condoOptions, item.condoId, "", "Pesquisar condomínio..."),
       input("campaign", "Campanha", item.campaign),
       select("type", "Tipo de material", marketingMaterialTypes(), item.type || item.materialType || "Card para grupo"),
       input("materialType", "Material específico", item.materialType),
@@ -2114,7 +2192,7 @@ function formFields(collection, item = {}) {
       input("requestedDeadline", "Prazo solicitado", item.requestedDeadline, "date"),
       input("informedDeadline", "Prazo informado", item.informedDeadline, "date"),
       select("priority", "Prioridade", priorityLevels(), item.priority || "Média"),
-      select("condoId", "Condomínio relacionado", condoOptions, item.condoId),
+      searchableSelect("condoId", "Condomínio relacionado", condoOptions, item.condoId, "", "Pesquisar condomínio..."),
       select("actionId", "Ação relacionada", actionOptions, item.actionId),
       input("commercialImpact", "Impacto comercial", item.commercialImpact, "text", "full"),
       input("affectedActions", "Ações afetadas", item.affectedActions, "number"),
@@ -2134,7 +2212,7 @@ function formFields(collection, item = {}) {
       input("openedAt", "Data de abertura", item.openedAt || todayISO(), "date"),
       input("deadline", "Prazo", item.deadline, "date"),
       select("priority", "Prioridade", priorityLevels(), item.priority || "Média"),
-      select("condoId", "Condomínio", condoOptions, item.condoId),
+      searchableSelect("condoId", "Condomínio", condoOptions, item.condoId, "", "Pesquisar condomínio..."),
       select("sellerId", "Vendedor afetado", sellerOptions, item.sellerId),
       select("actionId", "Ação afetada", actionOptions, item.actionId),
       input("impact", "Impacto", item.impact, "text", "full"),
@@ -2150,7 +2228,7 @@ function formFields(collection, item = {}) {
       input("endDate", "Fim", item.endDate, "date"),
       select("type", "Tipo", goalTypes(), item.type || "Equipe"),
       select("sellerId", "Vendedor", sellerOptions, item.sellerId),
-      select("condoId", "Condomínio", condoOptions, item.condoId),
+      searchableSelect("condoId", "Condomínio", condoOptions, item.condoId, "", "Pesquisar condomínio..."),
       input("region", "Região", item.region),
       input("campaign", "Campanha", item.campaign),
       input("expected", "Quantidade esperada", item.expected, "number"),
@@ -2315,31 +2393,67 @@ function bindSearchableSelects(root = document) {
 }
 
 function hydrateCondoFields(modal, collection) {
-  const condoField = modal.querySelector("[name='condoId']");
-  if (!condoField) return;
   const setValue = (name, value, force = false) => {
-    const field = modal.querySelector(`[name='${name}']`);
-    if (field && (force || !field.value)) field.value = value || "";
+    const field = modal.querySelector(`[name="${name}"], [name="${name}[]"]`);
+    if (!field) return;
+    const values = Array.isArray(value) ? value.map(String) : [String(value || "")];
+    const empty = field.multiple ? !Array.from(field.selectedOptions).length : !field.value;
+    if (!force && !empty) return;
+    if (field.multiple) {
+      Array.from(field.options).forEach((option) => {
+        option.selected = values.includes(String(option.value));
+      });
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    field.value = values[0] || "";
+    if (field.matches("[data-combo-value]")) {
+      const wrapper = field.closest("[data-searchable-select]");
+      const input = wrapper?.querySelector("[data-select-filter]");
+      const button = Array.from(wrapper?.querySelectorAll("[data-combo-option]") || []).find((option) => String(option.dataset.comboOption) === String(field.value));
+      if (input) input.value = button?.dataset.label || "";
+    }
+    field.dispatchEvent(new Event("change", { bubbles: true }));
   };
-  const fill = (force = false) => {
-    const condo = findById("condos", condoField.value);
+  const fillCondo = (force = false) => {
+    const condoField = modal.querySelector("[name='condoId']");
+    const condo = findById("condos", condoField?.value);
     if (!condo) return;
-    if (collection === "weeklySchedules") {
-      setValue("address", condo.address, force);
-    }
-    if (collection === "visits") {
-      setValue("syndic", condo.contactName, force);
-      setValue("managerCompany", condo.managerCompany, force);
-    }
-    if (collection === "expansions") {
-      setValue("condoName", condo.name, force);
-      setValue("address", condo.address, force);
-      setValue("city", condo.city, force);
-      setValue("neighborhood", condo.neighborhood, force);
-    }
+    setValue("condoName", condo.name, force);
+    setValue("address", condo.address, force);
+    setValue("city", condo.city, force);
+    setValue("neighborhood", condo.neighborhood, force);
+    setValue("syndic", condo.contactName, force);
+    setValue("managerCompany", condo.managerCompany, force);
+    setValue("region", condo.neighborhood || condo.city, false);
   };
-  condoField.addEventListener("change", () => fill(true));
-  fill(false);
+  const fillAction = (force = true) => {
+    const action = findById("commercialActions", modal.querySelector("[name='actionId']")?.value);
+    if (!action) return;
+    setValue("condoId", action.condoId, force);
+    setValue("roadAreaId", action.roadAreaId, force);
+    setValue("campaign", action.campaign, force);
+    setValue("region", action.region, force);
+    setValue("sellerIds", action.sellerIds || (action.sellerId ? [action.sellerId] : []), force);
+    setValue("date", action.startDate || action.date, false);
+    setValue("exactLocation", actionLocation(action), force);
+  };
+  const fillSchedule = (force = true) => {
+    const schedule = findById("weeklySchedules", modal.querySelector("[name='scheduleId']")?.value);
+    if (!schedule) return;
+    setValue("condoId", schedule.condoId, force);
+    setValue("sellerIds", schedule.sellerIds || (schedule.sellerId ? [schedule.sellerId] : []), force);
+    setValue("date", schedule.date, force);
+    setValue("startTime", schedule.startTime, force);
+    setValue("endTime", schedule.endTime, force);
+    setValue("exactLocation", schedule.address || findById("condos", schedule.condoId)?.address || "", force);
+  };
+  modal.querySelector("[name='condoId']")?.addEventListener("change", () => fillCondo(true));
+  modal.querySelector("[name='actionId']")?.addEventListener("change", () => fillAction(true));
+  modal.querySelector("[name='scheduleId']")?.addEventListener("change", () => fillSchedule(true));
+  fillCondo(false);
+  fillAction(false);
+  fillSchedule(false);
 }
 
 function searchKey(value) {
@@ -3707,6 +3821,154 @@ function backupData() {
 function downloadBackup() {
   const content = JSON.stringify(state.data, null, 2);
   download(new Blob([content], { type: "application/json;charset=utf-8" }), `backup-ws-consultoria-${todayISO()}.json`);
+}
+
+
+function storageStatusCard() {
+  const storage = state.system?.storage || {};
+  const persistent = storage.persistent === true;
+  return `<section class="card storage-card ${persistent ? "ok" : "warn"}">
+    <div>
+      <h3>Proteção dos dados</h3>
+      <p>${persistent ? "O servidor está usando armazenamento persistente para manter os dados entre deploys e reinícios." : "Atenção: o servidor não confirmou armazenamento persistente. Baixe backup e configure disco persistente para evitar perda após deploy/reinício."}</p>
+      <small>${escapeHtml(storage.dataDir || "Diretório não informado")}</small>
+    </div>
+    <button class="secondary" data-page-jump="backup">Backup</button>
+  </section>`;
+}
+
+async function createTutorialExamples() {
+  if (sampleRecordsCount() && !confirm("Já existem exemplos no sistema. Criar mais exemplos mesmo assim?")) return;
+  const seller = visibleCommercialSellers()[0] || state.data.sellers[0] || {};
+  const today = todayISO();
+  const condo = await createSample("condos", {
+    name: "EXEMPLO - Condomínio Modelo",
+    city: "Salvador",
+    neighborhood: "Pituba",
+    address: "Rua Exemplo Comercial, 100",
+    contactName: "Síndico Exemplo",
+    managerCompany: "Administradora Exemplo",
+    capacity: 120,
+    status: "Ativo",
+    notes: "Registro de demonstração. Pode excluir após conhecer o fluxo."
+  });
+  const roadArea = await createSample("roadAreas", {
+    name: "EXEMPLO - Área de Rua",
+    city: "Salvador",
+    neighborhood: "Pituba",
+    coverage: "Parcial",
+    potential: "Alto",
+    status: "Ativa",
+    setupLocation: "Entrada principal da região"
+  });
+  const plan = await createSample("plans", {
+    city: "Salvador",
+    serviceType: "Internet fibra",
+    name: "EXEMPLO - Plano 600 Mega",
+    speed: "600 Mega",
+    price: 99.9,
+    status: "Ativo"
+  });
+  const schedule = await createSample("weeklySchedules", {
+    condoId: condo.id,
+    condoName: condo.name,
+    address: condo.address,
+    date: today,
+    startTime: "09:00",
+    endTime: "12:00",
+    sellerIds: seller.id ? [seller.id] : [],
+    sellerId: seller.id || "",
+    workArea: "Portaria e áreas comuns",
+    accessMode: "Pode entrar",
+    status: "Programada",
+    followUpDays: 30,
+    notes: "Exemplo de programação da equipe."
+  });
+  await createSample("visits", {
+    condoId: condo.id,
+    condoName: condo.name,
+    sellerId: seller.id || "",
+    date: new Date().toISOString(),
+    couponDelivered: "Sim",
+    entryAllowed: "Sim",
+    partnershipInterest: "Alto",
+    relationship: "Bom",
+    commercialPotential: "Alto",
+    status: "Visitado",
+    nextVisit: addDaysISO(today, 30),
+    purpose: "Relacionamento",
+    notes: "Exemplo de visita com cupom entregue."
+  });
+  await createSample("expansions", {
+    condoId: condo.id,
+    condoName: condo.name,
+    address: condo.address,
+    city: condo.city,
+    neighborhood: condo.neighborhood,
+    sellerId: seller.id || "",
+    type: "Projeto",
+    expectedDate: addDaysISO(today, 7),
+    status: "Projeto",
+    notes: "Exemplo de demanda de expansão."
+  });
+  const action = await createSample("commercialActions", {
+    name: "EXEMPLO - Ação de vendas no condomínio",
+    condoId: condo.id,
+    region: condo.neighborhood,
+    campaign: "Campanha Exemplo",
+    startDate: today,
+    endDate: today,
+    sellerIds: seller.id ? [seller.id] : [],
+    responsible: seller.name || "Equipe",
+    type: "Ação de um dia",
+    structure: "Balcão comercial",
+    objective: "Gerar leads e vendas no condomínio",
+    goalSales: 3,
+    planId: plan.id,
+    status: "Planejada"
+  });
+  await createSample("actionResults", {
+    actionId: action.id,
+    scheduleId: schedule.id,
+    condoId: condo.id,
+    realized: "Sim",
+    date: today,
+    startTime: "09:00",
+    endTime: "12:00",
+    sellerIds: seller.id ? [seller.id] : [],
+    movement: "Médio",
+    leads: 8,
+    salesIdentified: 1,
+    status: "Realizada",
+    notes: "Exemplo de resultado de ação."
+  });
+  await createSample("materials", { name: "EXEMPLO - Balcão comercial", category: "Balcão", quantity: 1, state: "Bom", location: "Escritório", status: "Disponível", actionId: action.id });
+  await createSample("marketingRequests", { title: "EXEMPLO - Card para grupo", condoId: condo.id, campaign: "Campanha Exemplo", type: "Card para grupo", objective: "Divulgação da ação", requestDate: today, neededDate: addDaysISO(today, 2), priority: "Média", status: "Solicitação criada" });
+  await createSample("internalDemands", { title: "EXEMPLO - Validar cobertura técnica", description: "Confirmar disponibilidade para campanha.", department: "Engenharia", requestDate: today, requestedDeadline: addDaysISO(today, 3), priority: "Média", condoId: condo.id, actionId: action.id, status: "Solicitada" });
+  await createSample("pendingItems", { title: "EXEMPLO - Confirmar autorização", description: "Confirmar com síndico antes da ação.", category: "Autorização", openedAt: today, deadline: addDaysISO(today, 2), priority: "Alta", condoId: condo.id, sellerId: seller.id || "", actionId: action.id, status: "Aberta" });
+  await createSample("goals", { name: "EXEMPLO - Meta semanal", period: today.slice(0, 7), startDate: today, endDate: addDaysISO(today, 6), type: "Equipe", sellerId: seller.id || "", condoId: condo.id, expected: 5, current: 1, status: "Em andamento" });
+  await createSample("sales", { date: today, sellerId: seller.id || "", planId: plan.id, customer: "Cliente Exemplo", condoName: condo.name, condoId: condo.id, value: 99.9, status: "Confirmada", notes: "Venda de exemplo." });
+  await loadAll();
+  state.page = "tutorial";
+  renderNav();
+  render();
+  alert("Exemplos criados. Eles ficam marcados como exemplos e podem ser removidos nesta tela.");
+}
+
+async function createSample(collection, body) {
+  return request(`/api/${collection}`, { method: "POST", body: { ...body, sample: true } });
+}
+
+async function removeTutorialExamples() {
+  const examples = SAMPLE_COLLECTIONS.flatMap((collection) => (state.data[collection] || []).filter((item) => item.sample === true).map((item) => ({ collection, id: item.id })));
+  if (!examples.length) return alert("Não há exemplos para remover.");
+  if (!confirm(`Remover ${examples.length} exemplo(s) do sistema?`)) return;
+  for (const item of examples) {
+    await request(`/api/${item.collection}/${item.id}`, { method: "DELETE", silent: true });
+  }
+  await loadAll();
+  render();
+  alert("Exemplos removidos.");
 }
 
 function downloadReport() {
