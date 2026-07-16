@@ -534,7 +534,7 @@ function applyVerifiedCapacityUpdates() {
     if (!capacityNumber(update.capacity)) continue;
     for (const condo of condos) {
       if (capacityNumber(condo.capacity) > 0) continue;
-      condo.capacity = Number(update.capacity);
+      condo.capacity = capacityNumber(update.capacity);
       condo.capacityStatus = "Verificada";
       condo.capacityConfidence = update.confidence || "Alta";
       condo.capacitySourceTitle = update.sourceTitle || "Relatorio de Condominios - Use Telecom.pdf";
@@ -578,6 +578,8 @@ function classifySale(row, map) {
   ].join(" "));
   if (text.includes("CANCEL")) return "Cancelamento";
   if (text.includes("REPETIDOR")) return "Repetidor de sinal";
+  if (text.includes("FIXO") || text.includes("TELEFONIA") || text.includes("TELEFONE")) return "Fixo";
+  if (text.includes("RENOVAC") || text.includes("RETENCAO")) return "Renovação";
   if (text.includes("DOWNGRADE") || text.includes("DOWGRAD")) return "Downgrade";
   if (text.includes("UPGRADE")) return "Upgrade";
   return "Venda nova";

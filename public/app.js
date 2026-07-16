@@ -53,7 +53,6 @@ const menu = [
       ["weeklySchedules", "Programação semanal"],
       ["commercialActions", "Ações comerciais"],
       ["actionResults", "Realização das ações"],
-      ["coverageMap", "Mapa"],
       ["visits", "Relacionamento com Condomínios"],
       ["expansions", "Expansão"]
     ]
@@ -476,7 +475,7 @@ function dashboardContent(filter) {
 
 function summaryDashboard() {
   const month = new Date().toISOString().slice(0, 7);
-  const salesMonth = visibleSalesRows().filter((sale) => String(sale.date || "").startsWith(month));
+  const salesMonth = validInternetSalesRows(visibleSalesRows()).filter((sale) => String(sale.date || "").startsWith(month));
   const openVisits = state.data.visits.filter((visit) => visit.status !== "Concluida").length;
   const openExpansions = state.data.expansions.filter((item) => !["Concluido", "Cancelado"].includes(item.status)).length;
   const todayEvents = upcomingEvents(true).filter((event) => String(event.date || "").slice(0, 10) === todayISO());
@@ -502,6 +501,7 @@ function summaryDashboard() {
       ${metric("Protocolos em aberto", openExpansions)}
     </div>
     ${operationPulse()}
+    ${dailyRoutinePanel()}
     ${smartRecommendations()}
     <div class="grid cols-2">
       <section class="card">
@@ -517,6 +517,170 @@ function summaryDashboard() {
       <div class="section-head"><h3>Próximas atividades</h3><button class="secondary" data-page-jump="weeklySchedules">Ver programação</button></div>
       ${table(["Data", "Atividade", "Local"], upcomingEvents().slice(0, 10).map((event) => [fmtDateTime(event.date), event.title, event.location || "-"]))}
     </section>`;
+}
+
+function dailyRoutinePanel() {
+  const suggestions = dailyRoutineSuggestions();
+  const today = todayISO();
+  const createdToday = (state.data.pendingItems || [])
+    .filter((item) => item.category === "Rotina do supervisor" && String(item.deadline || "").slice(0, 10) === today)
+    .sort((a, b) => String(a.priority || "").localeCompare(String(b.priority || "")));
+  return `<section class="card daily-routine-card">
+    <div class="section-head">
+      <div>
+        <h3>Obrigações do dia</h3>
+        <small>Roteiro do supervisor gerado pelo próprio sistema, com base no que está pendente.</small>
+      </div>
+      <button class="primary" data-create-daily-routine>Criar tarefas de hoje</button>
+    </div>
+    <div class="routine-grid">
+      ${suggestions.map((item) => `<article class="routine-item ${escapeHtml((item.priority || "").toLowerCase())}">
+        <span>${escapeHtml(item.priority || "Média")}</span>
+        <strong>${escapeHtml(item.title)}</strong>
+        <small>${escapeHtml(item.note || "")}</small>
+        <button class="secondary" data-page-jump="${item.page || "pendingItems"}">${escapeHtml(item.action || "Abrir área")}</button>
+      </article>`).join("") || `<div class="empty">Nenhuma obrigação crítica encontrada para hoje.</div>`}
+    </div>
+    ${createdToday.length ? `<div class="routine-today">
+      <h4>Tarefas criadas para hoje</h4>
+      ${table(["Tarefa", "Prioridade", "Status"], createdToday.map((item) => [item.title || "-", item.priority || "-", status(item.status || "Aberta")]))}
+    </div>` : `<p class="hint">Clique em criar tarefas para transformar estas sugestões em pendências acompanháveis.</p>`}
+  </section>`;
+}
+
+function dailyRoutineSuggestions() {
+  const today = todayISO();
+  const month = today.slice(0, 7);
+  const latest = latestVisitByCondo();
+  const stale60 = state.data.condos.filter((condo) => daysSince(latest.get(condo.id)?.date) > 60);
+  const todaySchedules = state.data.weeklySchedules.filter((item) => String(item.date || "").slice(0, 10) === today);
+  const openActions = state.data.commercialActions.filter((item) => !closedStatuses().includes(item.status || ""));
+  const openExpansions = state.data.expansions.filter((item) => !closedStatuses().includes(item.status || ""));
+  const overdueDemands = [
+    ...state.data.internalDemands.filter((item) => isOverdue(item.nextCharge || item.requestedDeadline, item.status)),
+    ...state.data.marketingRequests.filter((item) => isOverdue(item.neededDate, item.status)),
+    ...state.data.pendingItems.filter((item) => isOverdue(item.deadline, item.status))
+  ];
+  const ranking = sellerRanking();
+  const sellersWithoutSale = visibleCommercialSellers().filter((seller) => {
+    const count = validInternetSalesRows(visibleSalesRows()).filter((sale) => sale.sellerId === seller.id && String(sale.date || "").startsWith(month)).length;
+    return count === 0;
+  });
+  const recentSupervisorVisits = state.data.visits.filter((visit) => {
+    const responsible = normalizeKey([visit.responsible, visit.sellerName, findById("sellers", visit.sellerId)?.name].filter(Boolean).join(" "));
+    return (responsible.includes("WILLIAN") || responsible.includes("SUPERVIS")) && daysSince(visit.date) <= 7;
+  });
+  return [
+    {
+      key: "sales-check",
+      priority: "Alta",
+      title: "Conferir vendas novas de internet e ranking do dia",
+      note: "Validar vendas com valor, cancelamentos, repetidores e fixo antes de cobrar a equipe.",
+      action: "Abrir vendas",
+      page: "sales"
+    },
+    todaySchedules.length ? {
+      key: "schedule-check",
+      priority: "Alta",
+      title: `Acompanhar ${todaySchedules.length} rota(s) programada(s) para hoje`,
+      note: "Confirmar presença, abordagem e retorno de cada consultor depois da ação.",
+      action: "Abrir programação",
+      page: "weeklySchedules"
+    } : {
+      key: "schedule-plan",
+      priority: "Média",
+      title: "Planejar a próxima ação da equipe externa",
+      note: "Escolher condomínios com baixa visita e direcionar consultores por área.",
+      action: "Programar equipe",
+      page: "weeklySchedules"
+    },
+    stale60.length ? {
+      key: "stale-condos",
+      priority: "Alta",
+      title: `${stale60.length} condomínio(s) sem visita há mais de 60 dias`,
+      note: "Priorizar locais com capacidade, parceria fraca ou potencial comercial alto.",
+      action: "Ver condomínios",
+      page: "condos"
+    } : null,
+    sellersWithoutSale.length ? {
+      key: "seller-coaching",
+      priority: "Alta",
+      title: `${sellersWithoutSale.length} consultor(es) sem venda nova no mês`,
+      note: "Fazer cobrança individual e definir foco de ação para cada pessoa.",
+      action: "Abrir equipe",
+      page: "sellers"
+    } : null,
+    openActions.length ? {
+      key: "actions-followup",
+      priority: "Média",
+      title: `${openActions.length} ação(ões) comercial(is) em aberto`,
+      note: "Registrar resultado, material utilizado e retorno de cada ação.",
+      action: "Abrir ações",
+      page: "commercialActions"
+    } : null,
+    openExpansions.length ? {
+      key: "expansion-followup",
+      priority: "Média",
+      title: `${openExpansions.length} demanda(s) de expansão em andamento`,
+      note: "Cobrar vistoria, implantação, projeto ou aprovação pendente.",
+      action: "Abrir expansão",
+      page: "expansions"
+    } : null,
+    overdueDemands.length ? {
+      key: "overdue-followup",
+      priority: "Alta",
+      title: `${overdueDemands.length} pendência(s) atrasada(s)`,
+      note: "Resolver o que está travando marketing, materiais, operação ou gestão.",
+      action: "Abrir pendências",
+      page: "pendingItems"
+    } : null,
+    !recentSupervisorVisits.length ? {
+      key: "supervisor-field",
+      priority: "Média",
+      title: "Agendar uma visita de supervisão em campo",
+      note: "O sistema não encontrou visita sua nos últimos 7 dias.",
+      action: "Agendar visita",
+      page: "visits"
+    } : null,
+    ranking[0] ? {
+      key: "leader-playbook",
+      priority: "Baixa",
+      title: `Extrair padrão do melhor desempenho: ${ranking[0].name}`,
+      note: "Usar a abordagem de quem está vendendo mais para orientar o restante da equipe.",
+      action: "Ver ranking",
+      page: "sellers"
+    } : null
+  ].filter(Boolean).slice(0, 8);
+}
+
+async function createDailyRoutineTasks() {
+  const today = todayISO();
+  const existing = new Set((state.data.pendingItems || [])
+    .filter((item) => item.category === "Rotina do supervisor" && String(item.deadline || "").slice(0, 10) === today)
+    .map((item) => item.routineKey || normalizeKey(item.title)));
+  const items = dailyRoutineSuggestions().filter((item) => !existing.has(item.key));
+  if (!items.length) {
+    alert("As obrigações de hoje já foram criadas.");
+    return;
+  }
+  for (const item of items) {
+    await request("/api/pendingItems", {
+      method: "POST",
+      body: {
+        title: item.title,
+        category: "Rotina do supervisor",
+        priority: item.priority,
+        status: "Aberta",
+        deadline: today,
+        responsible: state.user?.name || "Supervisor",
+        sourcePage: item.page,
+        routineKey: item.key,
+        notes: `${item.note || ""}\nAção sugerida: ${item.action || ""}`.trim()
+      }
+    });
+  }
+  await loadAll();
+  render();
 }
 
 function smartRecommendations() {
@@ -623,17 +787,24 @@ function managementFollowUpRows() {
   return rows.sort((a, b) => String(a[2]).localeCompare(String(b[2])));
 }
 
+
 function salesDashboard() {
   const month = new Date().toISOString().slice(0, 7);
-  const sales = visibleSalesRows().filter((sale) => String(sale.date || "").startsWith(month));
+  const monthRows = visibleSalesRows().filter((sale) => String(sale.date || "").startsWith(month));
+  const sales = validInternetSalesRows(monthRows);
+  const revenue = sales.reduce((sum, sale) => sum + saleValue(sale), 0);
   return `
-    <div class="grid cols-3">
-      ${metric("Vendas no mês", sales.length)}
-      ${metric("Receita apurada", money(sales.reduce((sum, sale) => sum + Number(sale.value || 0), 0)))}
-      ${metric("Ticket médio", money(sales.length ? sales.reduce((sum, sale) => sum + Number(sale.value || 0), 0) / sales.length : 0))}
+    <div class="grid cols-4">
+      ${metric("Vendas internet", sales.length)}
+      ${metric("Receita apurada", money(revenue))}
+      ${metric("Ticket médio", money(sales.length ? revenue / sales.length : 0))}
+      ${metric("Serviços adicionais", monthRows.filter((sale) => ["Repetidor de sinal", "Fixo"].includes(saleTypeLabel(sale))).length)}
     </div>
-    <section class="card">${barChart("Vendas por vendedor", sellerRanking().map((row) => ({ label: row.name, value: row.count })))}</section>
-    <section class="card">${table(["Data", "Vendedor", "Cliente", "Valor"], sales.slice(0, 12).map((sale) => [fmtDate(sale.date), saleSellerName(sale) || "-", sale.customer || "-", money(sale.value)]))}</section>`;
+    <div class="grid cols-2">
+      <section class="card">${barChart("Vendas por vendedor", sellerRanking().map((row) => ({ label: row.name, value: row.count })))}</section>
+      <section class="card">${barChart("Outros lançamentos", counts(monthRows.filter((sale) => saleTypeLabel(sale) !== "Venda nova").map((sale) => ({ type: saleTypeLabel(sale) })), "type"))}</section>
+    </div>
+    <section class="card">${table(["Data", "Vendedor", "Cliente", "Valor"], sales.slice(0, 12).map((sale) => [fmtDate(sale.date), saleSellerName(sale) || "-", sale.customer || "-", money(saleValue(sale))]))}</section>`;
 }
 
 function visitsDashboard(title, predicate) {
@@ -969,6 +1140,10 @@ function roadAreas() {
       ${metric("Alta prioridade", state.data.roadAreas.filter((item) => ["Crítica", "Alta", "Prioridade A"].includes(item.priority)).length)}
       ${metric("Ações de rua", state.data.commercialActions.filter((item) => item.actionType === "Ação de rua" || item.type === "Ação de rua").length)}
     </div>
+    <section class="card guidance-card">
+      <div class="section-head"><h3>Leitura por print do mapa</h3><small>Use esta área para organizar regiões de rua sem depender do módulo de mapa.</small></div>
+      <p class="hint">Envie o print do mapa aqui no chat quando precisar de apoio. No cadastro da área, registre o link/nome do print e salve as ruas ou referências interpretadas no campo de leitura.</p>
+    </section>
     ${filterPanel("roadAreas", [
       filterText("city", "Cidade"),
       filterText("neighborhood", "Bairro"),
@@ -1379,7 +1554,7 @@ function sales() {
       filterSelect("seller", "Vendedor", commercialSellerOptions()),
       filterSelect("condo", "Condomínio", options("condos").slice(1)),
       filterSelect("plan", "Plano", options("plans").slice(1)),
-      filterSelect("saleType", "Tipo", ["Venda nova", "Repetidor de sinal", "Upgrade", "Downgrade", "Cancelamento"]),
+      filterSelect("saleType", "Tipo", ["Venda nova", "Repetidor de sinal", "Fixo", "Upgrade", "Downgrade", "Renovação", "Cancelamento"]),
       filterSelect("status", "Status", ["Confirmada", "Pendente", "Cancelada"]),
       filterInput("minValue", "Valor mínimo", "number")
     ])}
@@ -1390,7 +1565,7 @@ function sales() {
       </div>
       <form id="salesSheetForm" class="form-grid">
         ${input("salesSheetUrl", "Link da planilha online", state.settings.salesSheetUrl || DEFAULT_SALES_SHEET_URL, "url", "full")}
-        <p class="hint full">Atualização automática ativa a cada 1 minuto. O sistema importa somente IVAN, LUISE, ISIS, BRUNA e ADRIELE, classificando venda nova, repetidor de sinal, upgrade, downgrade e cancelamento.</p>
+        <p class="hint full">Atualização automática ativa a cada 10 minutos. O sistema importa somente IVAN, LUISE, ISIS, BRUNA e ADRIELE, separando venda nova de internet, repetidor, fixo, upgrade, downgrade e cancelamento.</p>
         <label class="full">Ou cole aqui os dados copiados da planilha<textarea name="csvText" placeholder="Cole as colunas com cabeçalho: vendedor, cliente, plano, valor, data..."></textarea></label>
         <button class="secondary" type="button" data-import-sales-text>Importar dados colados</button>
       </form>
@@ -1402,7 +1577,7 @@ function sales() {
       findById("plans", sale.planId)?.name || sale.planName || "-",
       sale.customer || "-",
       sale.condoName || findById("condos", sale.condoId)?.name || "-",
-      money(sale.value),
+      money(saleValue(sale)),
       status(saleStatusLabel(sale)),
       actions("sales", sale.id)
     ]))}`;
@@ -1480,7 +1655,7 @@ function tutorial() {
       ${metric("Exemplos ativos", sampleCount)}
       ${metric("Condomínios", state.data.condos.length)}
       ${metric("Programações", state.data.weeklySchedules.length)}
-      ${metric("Vendas", visibleSalesRows().length)}
+      ${metric("Vendas internet", validInternetSalesRows(visibleSalesRows()).length)}
     </div>
     <section class="card">
       <div class="section-head"><h3>Fluxo recomendado</h3><small>Ordem simples para o dia a dia</small></div>
@@ -1695,9 +1870,37 @@ function saleTypeLabel(sale) {
   const text = normalizeKey([raw, sale.planName, sale.notes, sale.status].filter(Boolean).join(" "));
   if (text.includes("CANCEL")) return "Cancelamento";
   if (text.includes("REPETIDOR")) return "Repetidor de sinal";
+  if (text.includes("FIXO") || text.includes("TELEFONIA") || text.includes("TELEFONE")) return "Fixo";
+  if (text.includes("RENOVAC") || text.includes("RETENCAO")) return "Renovação";
   if (text.includes("DOWNGRADE") || text.includes("DOWGRAD")) return "Downgrade";
   if (text.includes("UPGRADE")) return "Upgrade";
   return raw || "Venda nova";
+}
+
+function saleValue(sale) {
+  const value = sale.value ?? sale.price ?? sale.amount ?? 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const text = String(value || "").trim();
+  if (!text) return 0;
+  const normalized = text
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\.(?=\d{3}(\D|$))/g, "")
+    .replace(",", ".");
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function isInternetSale(sale) {
+  if (saleStatusLabel(sale) === "Cancelada") return false;
+  if (saleValue(sale) <= 0) return false;
+  const label = saleTypeLabel(sale);
+  if (["Repetidor de sinal", "Fixo", "Upgrade", "Downgrade", "Renovação", "Cancelamento"].includes(label)) return false;
+  const text = normalizeKey([label, sale.planName, sale.notes].filter(Boolean).join(" "));
+  return label === "Venda nova" || text.includes("INTERNET") || text.includes("FIBRA") || text.includes("PLANO");
+}
+
+function validInternetSalesRows(rows = visibleSalesRows()) {
+  return rows.filter(isInternetSale);
 }
 
 function saleStatusLabel(sale) {
@@ -1707,33 +1910,38 @@ function saleStatusLabel(sale) {
   return "Confirmada";
 }
 
+
+
 function salesMetrics(rows) {
   const today = todayISO();
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 7);
   const weekIso = weekAgo.toISOString().slice(0, 10);
   const month = today.slice(0, 7);
-  const confirmed = rows.filter((sale) => saleStatusLabel(sale) !== "Cancelada");
+  const internetSales = validInternetSalesRows(rows);
   const goal = visibleCommercialSellers().reduce((sum, seller) => sum + Number(seller.goal || 0), 0);
   return `<div class="grid cols-5">
-    ${metric("Vendas do dia", confirmed.filter((sale) => String(sale.date || "").slice(0, 10) === today).length)}
-    ${metric("Semana", confirmed.filter((sale) => String(sale.date || "").slice(0, 10) >= weekIso).length)}
-    ${metric("Mês", confirmed.filter((sale) => String(sale.date || "").startsWith(month)).length)}
+    ${metric("Vendas do dia", internetSales.filter((sale) => String(sale.date || "").slice(0, 10) === today).length)}
+    ${metric("Semana", internetSales.filter((sale) => String(sale.date || "").slice(0, 10) >= weekIso).length)}
+    ${metric("Mês", internetSales.filter((sale) => String(sale.date || "").startsWith(month)).length)}
     ${metric("Meta", goal)}
-    ${metric("Conversão", `${confirmed.length}/${rows.length || 0}`)}
+    ${metric("Conversão", `${internetSales.length}/${goal || 0}`)}
   </div>
   <div class="grid cols-5">
-    ${metric("Venda nova", rows.filter((sale) => saleTypeLabel(sale) === "Venda nova").length)}
+    ${metric("Venda nova internet", internetSales.length)}
     ${metric("Repetidor", rows.filter((sale) => saleTypeLabel(sale) === "Repetidor de sinal").length)}
-    ${metric("Upgrade", rows.filter((sale) => saleTypeLabel(sale) === "Upgrade").length)}
-    ${metric("Downgrade", rows.filter((sale) => saleTypeLabel(sale) === "Downgrade").length)}
+    ${metric("Fixo", rows.filter((sale) => saleTypeLabel(sale) === "Fixo").length)}
+    ${metric("Upgrade/Downgrade", rows.filter((sale) => ["Upgrade", "Downgrade"].includes(saleTypeLabel(sale))).length)}
     ${metric("Cancelamentos", rows.filter((sale) => saleTypeLabel(sale) === "Cancelamento" || saleStatusLabel(sale) === "Cancelada").length)}
   </div>`;
 }
 
 function sellerPanel(seller, monthSales) {
-  const rows = monthSales.filter((sale) => sale.sellerId === seller.id);
-  const value = rows.reduce((sum, sale) => sum + Number(sale.value || 0), 0);
+  const sellerRows = monthSales.filter((sale) => sale.sellerId === seller.id);
+  const rows = validInternetSalesRows(sellerRows);
+  const repeaters = sellerRows.filter((sale) => saleTypeLabel(sale) === "Repetidor de sinal").length;
+  const fixed = sellerRows.filter((sale) => saleTypeLabel(sale) === "Fixo").length;
+  const value = rows.reduce((sum, sale) => sum + saleValue(sale), 0);
   const last = rows.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
   const conversion = seller.goal ? Math.round((rows.length / Number(seller.goal || 1)) * 100) : 0;
   return `<section class="card seller-card">
@@ -1743,6 +1951,7 @@ function sellerPanel(seller, monthSales) {
     </div>
     <strong>${rows.length}</strong>
     <small>Meta: ${seller.goal || 0} | Conversão: ${conversion}% | Ticket médio: ${money(rows.length ? value / rows.length : 0)}</small>
+    <small>Serviços adicionais: ${repeaters} repetidor(es) | ${fixed} fixo(s)</small>
     <small>Última venda: ${last ? fmtDate(last.date) : "-"}</small>
   </section>`;
 }
@@ -1854,6 +2063,34 @@ function userActions(user) {
   </div>`;
 }
 
+function attrSelectorValue(value) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function fieldRenderSelector(element) {
+  if (!element) return "";
+  if (element.dataset.search !== undefined) return "[data-search]";
+  if (element.dataset.mapSearch !== undefined) return "[data-map-search]";
+  if (element.dataset.filter) return `[data-filter="${attrSelectorValue(element.dataset.filter)}"]`;
+  return "";
+}
+
+function renderPreservingField(element) {
+  const selector = fieldRenderSelector(element);
+  const start = typeof element.selectionStart === "number" ? element.selectionStart : null;
+  const end = typeof element.selectionEnd === "number" ? element.selectionEnd : start;
+  render();
+  requestAnimationFrame(() => {
+    const next = selector ? document.querySelector(selector) : null;
+    if (!next) return;
+    next.focus();
+    if (typeof next.setSelectionRange === "function" && start !== null) {
+      const max = String(next.value || "").length;
+      next.setSelectionRange(Math.min(start, max), Math.min(end ?? start, max));
+    }
+  });
+}
+
 function bindPageEvents() {
   document.querySelectorAll(".action-menu").forEach((menu) => menu.addEventListener("toggle", () => {
     if (!menu.open) return;
@@ -1864,6 +2101,7 @@ function bindPageEvents() {
   document.querySelectorAll("[data-new]").forEach((button) => button.addEventListener("click", () => openForm(button.dataset.new)));
   $("[data-create-examples]")?.addEventListener("click", createTutorialExamples);
   $("[data-remove-examples]")?.addEventListener("click", removeTutorialExamples);
+  $("[data-create-daily-routine]")?.addEventListener("click", createDailyRoutineTasks);
   document.querySelectorAll("[data-schedule-condo]").forEach((button) => button.addEventListener("click", () => openScheduleForCondo(button.dataset.scheduleCondo)));
   document.querySelectorAll("[data-edit]").forEach((button) => button.addEventListener("click", () => {
     const [collection, id] = button.dataset.edit.split(":");
@@ -1905,13 +2143,13 @@ function bindPageEvents() {
   bindReminderEvents();
   document.querySelectorAll("[data-search]").forEach((input) => input.addEventListener("input", () => {
     state.query = input.value;
-    render();
+    renderPreservingField(input);
   }));
-  document.querySelectorAll("[data-filter]").forEach((input) => input.addEventListener("input", () => {
+  document.querySelectorAll("[data-filter]").forEach((input) => input.addEventListener(input.tagName === "SELECT" ? "change" : "input", () => {
     const [page, key] = input.dataset.filter.split(":");
     state.filters[page] = { ...(state.filters[page] || {}), [key]: input.value };
     if (page === "weeklySchedules" && (key === "from" || key === "to") && input.value) state.scheduleWeekStart = currentMondayISO(new Date(`${input.value}T12:00:00`));
-    render();
+    input.tagName === "SELECT" ? render() : renderPreservingField(input);
   }));
   document.querySelectorAll("[data-filter-toggle]").forEach((button) => button.addEventListener("click", () => {
     const page = button.dataset.filterToggle;
@@ -2066,6 +2304,7 @@ function formFields(collection, item = {}) {
       input("date", "Data", item.date || todayISO(), "date"),
       select("sellerId", "Vendedor", sellerOptions, item.sellerId),
       select("planId", "Plano", planOptions, item.planId),
+      select("type", "Tipo de lançamento", ["Venda nova", "Repetidor de sinal", "Fixo", "Upgrade", "Downgrade", "Renovação", "Cancelamento"], item.type || "Venda nova"),
       input("customer", "Cliente", item.customer),
       input("condoName", "Condomínio", item.condoName),
       input("value", "Valor", item.value, "number"),
@@ -2088,6 +2327,8 @@ function formFields(collection, item = {}) {
       input("city", "Cidade", item.city),
       input("neighborhood", "Bairro", item.neighborhood),
       area("streets", "Ruas abrangidas", item.streets, "full"),
+      input("mapPrint", "Print ou link do mapa", item.mapPrint, "text", "full"),
+      area("mapInterpretation", "Leitura do print / ruas identificadas", item.mapInterpretation, "full"),
       input("ceps", "CEPs", item.ceps),
       input("reference", "Ponto de referência", item.reference),
       input("locationLink", "Link de localização", item.locationLink, "url", "full"),
@@ -4367,8 +4608,8 @@ function activeReportFilter() {
 
 function reportMetricRows(filter = state.reportFilter) {
   const month = new Date().toISOString().slice(0, 7);
-  const salesMonth = visibleSalesRows().filter((sale) => String(sale.date || "").startsWith(month));
-  const revenue = salesMonth.reduce((sum, sale) => sum + Number(sale.value || 0), 0);
+  const salesMonth = validInternetSalesRows(visibleSalesRows()).filter((sale) => String(sale.date || "").startsWith(month));
+  const revenue = salesMonth.reduce((sum, sale) => sum + saleValue(sale), 0);
   const openVisits = state.data.visits.filter((visit) => !["Finalizado", "Visitado", "Concluída"].includes(visit.status)).length;
   const openExpansions = state.data.expansions.filter((item) => !["Concluído", "Reprovado"].includes(item.status)).length;
   const latest = latestVisitByCondo();
@@ -4449,7 +4690,7 @@ function reportLatestSalesSection() {
       sale.customer || "-",
       findById("condos", sale.condoId)?.name || sale.condoName || "-",
       findById("plans", sale.planId)?.name || sale.planName || "-",
-      money(sale.value),
+      money(saleValue(sale)),
       saleStatusLabel(sale)
     ]);
   return reportSection("Vendas recentes", ["Data", "Vendedor", "Tipo", "Cliente", "Condomínio", "Plano", "Valor", "Status"], rows);
@@ -4934,7 +5175,7 @@ function reportExportRows(filter = state.reportFilter) {
   const visibleSales = visibleSalesRows();
   if (selected.has("metrics")) push("Indicadores", reportMetricRows(filter));
   if (selected.has("salesRanking")) push("Ranking comercial", sellerRanking().slice(0, 12).map((row) => [row.name, row.count, money(row.value), `${row.conversion}%`]));
-  if (selected.has("latestSales")) push("Vendas recentes", [...visibleSales].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 20).map((sale) => [fmtDate(sale.date), saleSellerName(sale) || "-", saleTypeLabel(sale), sale.customer || "-", findById("condos", sale.condoId)?.name || sale.condoName || "-", money(sale.value), saleStatusLabel(sale)]));
+  if (selected.has("latestSales")) push("Vendas recentes", [...visibleSales].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 20).map((sale) => [fmtDate(sale.date), saleSellerName(sale) || "-", saleTypeLabel(sale), sale.customer || "-", findById("condos", sale.condoId)?.name || sale.condoName || "-", money(saleValue(sale)), saleStatusLabel(sale)]));
   if (selected.has("salesStatus")) push("Status das vendas", counts(visibleSales.map((sale) => ({ status: saleStatusLabel(sale) })), "status").map((row) => [row.label, row.value]));
   if (selected.has("relationships")) push("Relacionamento prioritário", state.data.visits.filter((visit) => !["Finalizado", "Visitado"].includes(visit.status)).slice(0, 20).map((visit) => [findById("condos", visit.condoId)?.name || visit.condoName || "-", visit.status || "-", visit.relationship || "-", fmtDate(visit.nextVisit || visit.date)]));
   if (selected.has("upcomingVisits")) push("Próximas visitas", upcomingEvents().filter((event) => event.type === "visits").slice(0, 20).map((event) => [fmtDateTime(event.date), event.title, event.status || "-", event.location || "-"]));
@@ -4970,12 +5211,12 @@ function reportExportRows(filter = state.reportFilter) {
 }
 
 function reportCards() {
-  const sales = visibleSalesRows();
+  const sales = validInternetSalesRows(visibleSalesRows());
   const visits = state.data.visits;
   const expansions = state.data.expansions;
   return `<div class="grid cols-4">
     ${metric("Vendas", sales.length)}
-    ${metric("Receita total", money(sales.reduce((sum, sale) => sum + Number(sale.value || 0), 0)))}
+    ${metric("Receita total", money(sales.reduce((sum, sale) => sum + saleValue(sale), 0)))}
     ${metric("Visitas", visits.length)}
     ${metric("Protocolos", expansions.length)}
   </div>
@@ -5037,7 +5278,7 @@ function filteredWithPage(page, rows = state.data[page] || []) {
     if (filters.sindico && !includesAny([item.contactName, item.syndic], filters.sindico)) return false;
     if (filters.partnership && String(item.partnershipInterest || "") !== filters.partnership) return false;
     if (filters.speed && !includesAny([item.speed, item.name], filters.speed)) return false;
-    if (filters.minValue && Number(item.value || 0) < Number(filters.minValue)) return false;
+    if (filters.minValue && saleValue(item) < Number(filters.minValue)) return false;
     if (filters.maxValue && Number(item.price || 0) > Number(filters.maxValue)) return false;
     return true;
   });
@@ -5078,11 +5319,11 @@ function alertKey(event) {
 
 function sellerRanking() {
   const month = new Date().toISOString().slice(0, 7);
-  const visibleSales = visibleSalesRows();
+  const visibleSales = validInternetSalesRows(visibleSalesRows());
   return visibleCommercialSellers().map((seller) => {
     const sales = visibleSales.filter((sale) => sale.sellerId === seller.id && String(sale.date || "").startsWith(month));
     const conversion = seller.goal ? Math.round((sales.length / Number(seller.goal || 1)) * 100) : 0;
-    return { id: seller.id, name: seller.name, count: sales.length, value: sales.reduce((sum, sale) => sum + Number(sale.value || 0), 0), conversion };
+    return { id: seller.id, name: seller.name, count: sales.length, value: sales.reduce((sum, sale) => sum + saleValue(sale), 0), conversion };
   }).sort((a, b) => b.count - a.count || b.value - a.value);
 }
 
