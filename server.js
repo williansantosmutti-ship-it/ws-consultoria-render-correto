@@ -23,6 +23,9 @@ const OLD_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1VUVzx5q_emU
 const DEFAULT_SALES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1r1oF6e43liRkKVbIP8h-yf_L6K22fdyzu4g816gtAV8/edit?hl=pt-br&gid=1772567492#gid=1772567492";
 const SALES_IMPORT_INTERVAL_MS = Number(process.env.SALES_IMPORT_INTERVAL_MS || 600000);
 const DISABLE_SALES_AUTO_IMPORT = String(process.env.DISABLE_SALES_AUTO_IMPORT || "").toLowerCase() === "true";
+const CAPACITY_RESEARCH_TOKEN = process.env.CAPACITY_RESEARCH_TOKEN || "";
+const CAPACITY_RESEARCH_INTERVAL_MS = Number(process.env.CAPACITY_RESEARCH_INTERVAL_MS || 0);
+const DISABLE_CAPACITY_AUTO_RESEARCH = String(process.env.DISABLE_CAPACITY_AUTO_RESEARCH || "").toLowerCase() === "true";
 const ALLOWED_SALES_SELLERS = new Map([
   ["IVAN", "IVAN"],
   ["LUISE", "LUISE"],
@@ -33,6 +36,7 @@ const ALLOWED_SALES_SELLERS = new Map([
 const LOCAL_RESTORE_COLLECTIONS = ["sellers", "condos", "visits", "coupons", "plans", "expansions", "weeklySchedules", "roadAreas", "commercialActions", "actionResults", "materials", "marketingRequests", "internalDemands", "pendingItems", "goals", "deletedRefs"];
 const loginAttempts = new Map();
 let salesImportRunning = false;
+let capacityResearchRunning = false;
 let nodemailerModule = null;
 
 const sessions = new Map();
@@ -851,6 +855,230 @@ async function runAutomaticSalesImport() {
   }
 }
 
+function decodeHtml(value) {
+  const text = String(value || "");
+  const named = {
+    amp: "&",
+    quot: '"',
+    apos: "'",
+    lt: "<",
+    gt: ">",
+    nbsp: " "
+  };
+  return text
+    .replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (_, entity) => {
+      const key = entity.toLowerCase();
+      if (key[0] === "#") {
+        const code = key[1] === "x" ? parseInt(key.slice(2), 16) : parseInt(key.slice(1), 10);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : "";
+      }
+      return named[key] || "";
+    })
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stripTags(value) {
+  return decodeHtml(String(value || "").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " "));
+}
+
+function buildCondoCapacityQuery(condo) {
+  return [
+    `"${condo.name || condo.condoName || ""}"`,
+    condo.city || "",
+    condo.neighborhood || "",
+    "quantidade de unidades apartamentos casas condomínio"
+  ].filter(Boolean).join(" ");
+}
+
+async function fetchTextWithTimeout(url, timeoutMs = 9000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 WS-Consultoria-CapacityResearch/1.0",
+        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.7"
+      }
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function extractDuckDuckGoResults(html) {
+  const results = [];
+  const blocks = String(html || "").split(/result__body/gi).slice(1, 9);
+  for (const block of blocks) {
+    const linkMatch = block.match(/<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+    const snippetMatch = block.match(/class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i) || block.match(/class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+    if (!linkMatch) continue;
+    let url = decodeHtml(linkMatch[1]);
+    try {
+      const parsed = new URL(url, "https://duckduckgo.com");
+      const uddg = parsed.searchParams.get("uddg");
+      if (uddg) url = decodeURIComponent(uddg);
+    } catch {
+      // keep original URL
+    }
+    results.push({
+      title: stripTags(linkMatch[2]),
+      url,
+      snippet: stripTags(snippetMatch?.[1] || "")
+    });
+  }
+  return results;
+}
+
+function capacityCandidatesFromText(text) {
+  const candidates = [];
+  const source = String(text || "").replace(/\s+/g, " ");
+  const patterns = [
+    /(\d{1,4})\s*(?:unidades|apartamentos|apartamento|aptos|apto|casas|resid[eê]ncias|residenciais|lotes)\b/gi,
+    /(?:unidades|apartamentos|apartamento|aptos|apto|casas|resid[eê]ncias|lotes)\s*(?:de|com|:)?\s*(\d{1,4})\b/gi,
+    /(\d{1,2})\s*torres?.{0,45}?(\d{1,4})\s*(?:unidades|apartamentos|apartamento|aptos|apto)\b/gi
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(source))) {
+      const numbers = match.slice(1).filter(Boolean).map((item) => Number(item));
+      let value = numbers[numbers.length - 1];
+      if (numbers.length === 2 && numbers[0] <= 20 && numbers[1] <= 400) value = numbers[0] * numbers[1];
+      if (!Number.isFinite(value) || value < 4 || value > 5000) continue;
+      const start = Math.max(0, match.index - 90);
+      const end = Math.min(source.length, match.index + match[0].length + 90);
+      candidates.push({ value, evidence: source.slice(start, end).trim() });
+    }
+  }
+  return candidates;
+}
+
+function scoreCapacityCandidate(condo, result, candidate) {
+  const haystack = normalizeTextKey([result.title, result.snippet, candidate.evidence].join(" "));
+  const condoName = normalizeTextKey(condo.name || condo.condoName || "");
+  const city = normalizeTextKey(condo.city || "");
+  const neighborhood = normalizeTextKey(condo.neighborhood || "");
+  let score = 0;
+  if (condoName && haystack.includes(condoName)) score += 5;
+  for (const part of condoName.split(" ").filter((part) => part.length > 3)) {
+    if (haystack.includes(part)) score += 1;
+  }
+  if (city && haystack.includes(city)) score += 2;
+  if (neighborhood && haystack.includes(neighborhood)) score += 1;
+  if (/unidades|apartamentos|aptos|casas|residencias|residências/i.test(candidate.evidence)) score += 3;
+  if (/zapimoveis|vivareal|imovelweb|chavesnamao|lopes|olx|quintoandar|wimoveis|sub100|condominio/i.test(String(result.url))) score += 1;
+  return score;
+}
+
+function confidenceFromScore(score) {
+  if (score >= 9) return "Alta";
+  if (score >= 6) return "Média";
+  return "Baixa";
+}
+
+function bestCapacityEvidence(condo, results) {
+  let best = null;
+  for (const result of results) {
+    const candidates = capacityCandidatesFromText([result.title, result.snippet].join(" "));
+    for (const candidate of candidates) {
+      const score = scoreCapacityCandidate(condo, result, candidate);
+      if (!best || score > best.score) {
+        best = {
+          capacity: candidate.value,
+          confidence: confidenceFromScore(score),
+          sourceUrl: result.url,
+          sourceTitle: result.title,
+          evidence: candidate.evidence,
+          score
+        };
+      }
+    }
+  }
+  return best;
+}
+
+async function researchSingleCondoCapacity(condo) {
+  const query = buildCondoCapacityQuery(condo);
+  if (!String(condo.name || condo.condoName || "").trim()) return null;
+  const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  const html = await fetchTextWithTimeout(url);
+  const results = extractDuckDuckGoResults(html);
+  return bestCapacityEvidence(condo, results);
+}
+
+function shouldReplaceCapacity(condo, evidence) {
+  if (!evidence) return false;
+  if (!condo.capacity) return true;
+  if (String(condo.capacityStatus || "").toLowerCase() !== "verificada") return true;
+  return evidence.confidence === "Alta" && String(condo.capacityConfidence || "") !== "Alta";
+}
+
+async function researchCondoCapacities(db, user, options = {}) {
+  if (capacityResearchRunning) return { running: true, checked: 0, updated: 0, pending: 0, skipped: 0, errors: 0, items: [] };
+  capacityResearchRunning = true;
+  const now = new Date().toISOString();
+  const limit = Math.max(1, Math.min(Number(options.limit || 120), 300));
+  const force = parseBoolean(options.force, false);
+  const candidates = db.condos
+    .filter((condo) => !condo.deleted)
+    .filter((condo) => force || !condo.capacity || String(condo.capacityStatus || "").toLowerCase() !== "verificada")
+    .slice(0, limit);
+  const result = { checked: 0, updated: 0, pending: 0, skipped: 0, errors: 0, totalEligible: candidates.length, remaining: 0, items: [] };
+  try {
+    for (const condo of candidates) {
+      result.checked += 1;
+      try {
+        const evidence = await researchSingleCondoCapacity(condo);
+        if (evidence && shouldReplaceCapacity(condo, evidence)) {
+          condo.capacity = evidence.capacity;
+          condo.capacityStatus = "Verificada";
+          condo.capacityConfidence = evidence.confidence;
+          condo.capacitySource = evidence.sourceUrl;
+          condo.capacitySourceTitle = evidence.sourceTitle;
+          condo.capacityEvidence = evidence.evidence;
+          condo.capacityCheckedAt = now;
+          condo.updatedAt = now;
+          result.updated += 1;
+          result.items.push({ id: condo.id, name: condo.name, capacity: evidence.capacity, confidence: evidence.confidence, source: evidence.sourceUrl });
+        } else if (evidence) {
+          condo.capacityStatus = condo.capacityStatus || "Verificada";
+          condo.capacityConfidence = condo.capacityConfidence || evidence.confidence;
+          condo.capacitySource = condo.capacitySource || evidence.sourceUrl;
+          condo.capacityEvidence = condo.capacityEvidence || evidence.evidence;
+          condo.capacityCheckedAt = now;
+          result.skipped += 1;
+        } else {
+          condo.capacityStatus = condo.capacity ? (condo.capacityStatus || "Não verificada") : "Pendente validação";
+          condo.capacityCheckedAt = now;
+          result.pending += 1;
+        }
+      } catch (error) {
+        condo.capacityStatus = condo.capacity ? (condo.capacityStatus || "Não verificada") : "Erro na pesquisa";
+        condo.capacityCheckedAt = now;
+        condo.capacityResearchError = error.message;
+        result.errors += 1;
+      }
+    }
+    result.remaining = db.condos.filter((condo) => !condo.capacity || String(condo.capacityStatus || "").toLowerCase() !== "verificada").length;
+    db.settings.capacityResearchAt = now;
+    db.settings.capacityResearchStatus = `${result.updated} atualizado(s), ${result.pending} pendente(s), ${result.errors} erro(s)`;
+    addActivity(db, user || { name: "Sistema" }, "Pesquisou capacidade dos condomínios", db.settings.capacityResearchStatus);
+    return result;
+  } finally {
+    capacityResearchRunning = false;
+  }
+}
+
+async function runAutomaticCapacityResearch() {
+  const db = ensureShape(readStore());
+  const result = await researchCondoCapacities(db, { name: "Sistema" }, { limit: 80 });
+  if (!result.running) writeStore(db);
+  return result;
+}
+
 async function api(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const method = req.method;
@@ -936,6 +1164,26 @@ async function api(req, res) {
     if (imported || !body.silent) addActivity(db, user, "Importou vendas", `${imported} venda(s) pela planilha online`);
     writeStore(db);
     return send(res, 200, { imported });
+  }
+
+  if (url.pathname === "/api/condos/research-capacity" && method === "POST") {
+    const user = requireAuth(req, res);
+    if (!user) return;
+    const body = await getBody(req);
+    const db = ensureShape(readStore());
+    const result = await researchCondoCapacities(db, user, body || {});
+    if (!result.running) writeStore(db);
+    return send(res, 200, result);
+  }
+
+  if (url.pathname === "/api/automation/condo-capacity" && method === "POST") {
+    const token = req.headers["x-automation-token"] || url.searchParams.get("token");
+    if (!CAPACITY_RESEARCH_TOKEN || token !== CAPACITY_RESEARCH_TOKEN) return send(res, 403, { error: "Token da automacao invalido ou nao configurado." });
+    const body = await getBody(req);
+    const db = ensureShape(readStore());
+    const result = await researchCondoCapacities(db, { name: "Automacao" }, body || {});
+    if (!result.running) writeStore(db);
+    return send(res, 200, result);
   }
 
   const calendarInviteMatch = url.pathname.match(/^\/api\/weeklySchedules\/([^/]+)\/calendar-invite$/);
@@ -1032,6 +1280,11 @@ setInterval(() => {
 if (!DISABLE_SALES_AUTO_IMPORT) {
   setInterval(runAutomaticSalesImport, SALES_IMPORT_INTERVAL_MS).unref();
   setTimeout(runAutomaticSalesImport, 5000).unref();
+}
+
+if (!DISABLE_CAPACITY_AUTO_RESEARCH && CAPACITY_RESEARCH_INTERVAL_MS > 0) {
+  setInterval(runAutomaticCapacityResearch, CAPACITY_RESEARCH_INTERVAL_MS).unref();
+  setTimeout(runAutomaticCapacityResearch, 15000).unref();
 }
 
 http.createServer((req, res) => {

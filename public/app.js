@@ -699,7 +699,25 @@ function calendarGrid() {
 
 function condos() {
   const rows = filteredWithPage("condos");
+  const verified = state.data.condos.filter((item) => item.capacity && String(item.capacityStatus || "").toLowerCase() === "verificada").length;
+  const pending = state.data.condos.filter((item) => !item.capacity || /pendente|erro/i.test(String(item.capacityStatus || ""))).length;
+  const lastResearch = state.settings.capacityResearchAt ? fmtDateTime(state.settings.capacityResearchAt) : "Nunca executada";
   return `
+    <section class="card capacity-research-card">
+      <div>
+        <span class="eyebrow">Capacidade dos condomínios</span>
+        <h3>Pesquisa online de unidades</h3>
+        <p>Pesquisa fontes públicas na internet, atualiza a quantidade de casas/apartamentos e grava fonte, confiança e data da verificação.</p>
+      </div>
+      <div class="capacity-research-stats">
+        <span><strong>${verified}</strong> verificadas</span>
+        <span><strong>${pending}</strong> pendentes</span>
+        <small>Última pesquisa: ${escapeHtml(lastResearch)}</small>
+      </div>
+      <div class="toolbar">
+        <button class="primary" data-research-capacity>Pesquisar capacidades online</button>
+      </div>
+    </section>
     ${filterPanel("condos", [
       filterText("city", "Cidade"),
       filterText("neighborhood", "Bairro"),
@@ -716,11 +734,20 @@ function condos() {
     visitInfo.lastHtml,
     visitInfo.nextHtml,
     [item.contactName, item.managerCompany, item.phone].filter(Boolean).join(" | ") || "-",
-    item.capacity || "-",
+    capacityCell(item),
     status(item.status || "Ativo"),
     actions("condos", item.id)
   ];
   }))}`;
+}
+
+function capacityCell(item) {
+  const value = item.capacity ? `<strong>${escapeHtml(item.capacity)}</strong> unidade(s)` : "<strong>-</strong>";
+  const statusLabel = item.capacityStatus || (item.capacity ? "Não verificada" : "Pendente validação");
+  const confidence = item.capacityConfidence ? `Confiança: ${escapeHtml(item.capacityConfidence)}` : "";
+  const checked = item.capacityCheckedAt ? `Verificado em ${fmtDate(item.capacityCheckedAt)}` : "";
+  const source = item.capacitySource ? `<a href="${escapeHtml(item.capacitySource)}" target="_blank" rel="noopener">fonte</a>` : "";
+  return `<div class="capacity-cell">${value}<small>${escapeHtml(statusLabel)}${confidence ? ` | ${confidence}` : ""}${checked ? ` | ${checked}` : ""}${source ? ` | ${source}` : ""}</small></div>`;
 }
 
 function condoVisitSummary(condoId) {
@@ -1964,6 +1991,7 @@ function bindPageEvents() {
   });
   $("[data-import-sales]")?.addEventListener("click", importSales);
   $("[data-import-sales-text]")?.addEventListener("click", importSalesText);
+  $("[data-research-capacity]")?.addEventListener("click", researchCondoCapacities);
   $("#settingsForm")?.addEventListener("submit", saveSettings);
 }
 
@@ -1983,6 +2011,11 @@ function formFields(collection, item = {}) {
       input("contactName", "Síndico", item.contactName),
       input("managerCompany", "Administradora", item.managerCompany),
       input("capacity", "Quantidade de unidades", item.capacity, "number"),
+      select("capacityStatus", "Status da capacidade", ["Não verificada", "Verificada", "Pendente validação", "Erro na pesquisa"], item.capacityStatus || "Não verificada"),
+      select("capacityConfidence", "Confiança da fonte", ["", "Alta", "Média", "Baixa"], item.capacityConfidence || ""),
+      input("capacitySource", "Fonte da capacidade", item.capacitySource, "url", "full"),
+      input("capacityCheckedAt", "Verificado em", item.capacityCheckedAt ? String(item.capacityCheckedAt).slice(0, 10) : "", "date"),
+      area("capacityEvidence", "Evidência encontrada", item.capacityEvidence, "full"),
       input("phone", "Telefone", item.phone),
       input("email", "Email", item.email, "email"),
       select("status", "Status", ["Ativo", "Pendente", "Inativo"], item.status),
@@ -3058,6 +3091,39 @@ async function importSalesText() {
     render();
   } catch (error) {
     alert(error.message);
+  }
+}
+
+async function researchCondoCapacities() {
+  const total = state.data.condos.length;
+  if (!total) return alert("Cadastre os condomínios antes de pesquisar a capacidade.");
+  const force = confirm("Pesquisar capacidade online para todos os condomínios sem capacidade verificada?\n\nClique em OK para pesquisar apenas pendentes. Clique em Cancelar se quiser revisar manualmente antes.");
+  if (!force) return;
+  const button = $("[data-research-capacity]");
+  const original = button?.textContent;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Pesquisando...";
+  }
+  try {
+    const result = await request("/api/condos/research-capacity", { method: "POST", body: { limit: 120 } });
+    await loadAll();
+    render();
+    if (result.running) return alert("Já existe uma pesquisa de capacidade em andamento. Aguarde finalizar.");
+    alert([
+      "Pesquisa concluída.",
+      `${result.updated || 0} condomínio(s) atualizado(s).`,
+      `${result.pending || 0} pendente(s) de validação.`,
+      `${result.errors || 0} erro(s).`,
+      result.remaining ? `${result.remaining} ainda precisam de verificação.` : "Todos os elegíveis foram processados."
+    ].join("\n"));
+  } catch (error) {
+    alert(error.message || "Não foi possível pesquisar as capacidades agora.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = original;
+    }
   }
 }
 
