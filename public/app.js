@@ -699,30 +699,11 @@ function calendarGrid() {
 
 function condos() {
   const rows = filteredWithPage("condos");
-  const verified = state.data.condos.filter((item) => item.capacity && String(item.capacityStatus || "").toLowerCase() === "verificada").length;
-  const pending = state.data.condos.filter((item) => !item.capacity || /pendente|erro/i.test(String(item.capacityStatus || ""))).length;
-  const lastResearch = state.settings.capacityResearchAt ? fmtDateTime(state.settings.capacityResearchAt) : "Nunca executada";
-  const researchStatus = state.settings.capacityResearchStatus || "Aguardando primeira pesquisa";
   return `
-    <section class="card capacity-research-card">
-      <div>
-        <span class="eyebrow">Capacidade dos condomínios</span>
-        <h3>Pesquisa online de unidades</h3>
-        <p>Pesquisa fontes públicas na internet, atualiza a quantidade de casas/apartamentos e grava fonte, confiança e data da verificação.</p>
-      </div>
-      <div class="capacity-research-stats">
-        <span><strong>${verified}</strong> verificadas</span>
-        <span><strong>${pending}</strong> pendentes</span>
-        <small>Última pesquisa: ${escapeHtml(lastResearch)}</small>
-        <small>Status: ${escapeHtml(researchStatus)}</small>
-      </div>
-      <div class="toolbar">
-        <button class="primary" data-research-capacity>Pesquisar capacidades online</button>
-      </div>
-    </section>
     ${filterPanel("condos", [
       filterText("city", "Cidade"),
       filterText("neighborhood", "Bairro"),
+      filterSelect("capacityPresence", "Quantidade", [{ id: "with", name: "Com quantidade" }, { id: "without", name: "Sem quantidade" }]),
       filterSelect("status", "Status", ["Ativo", "Pendente", "Inativo"]),
       filterText("administradora", "Administradora"),
       filterText("sindico", "Síndico")
@@ -1993,7 +1974,6 @@ function bindPageEvents() {
   });
   $("[data-import-sales]")?.addEventListener("click", importSales);
   $("[data-import-sales-text]")?.addEventListener("click", importSalesText);
-  $("[data-research-capacity]")?.addEventListener("click", researchCondoCapacities);
   $("#settingsForm")?.addEventListener("submit", saveSettings);
 }
 
@@ -3093,32 +3073,6 @@ async function importSalesText() {
     render();
   } catch (error) {
     alert(error.message);
-  }
-}
-
-async function researchCondoCapacities() {
-  const total = state.data.condos.length;
-  if (!total) return alert("Cadastre os condomínios antes de pesquisar a capacidade.");
-  if (!confirm("Iniciar pesquisa online em segundo plano para todos os condomínios sem capacidade verificada?")) return;
-  const button = $("[data-research-capacity]");
-  const original = button?.textContent;
-  if (button) {
-    button.disabled = true;
-    button.textContent = "Pesquisando...";
-  }
-  try {
-    const result = await request("/api/condos/research-capacity", { method: "POST", body: { limit: 300, background: true } });
-    await loadAll();
-    render();
-    if (result.running) return alert("Já existe uma pesquisa de capacidade em andamento. Aguarde finalizar.");
-    alert("Pesquisa iniciada em segundo plano. Você pode continuar usando o sistema e voltar em alguns minutos para conferir os resultados.");
-  } catch (error) {
-    alert(error.message || "Não foi possível pesquisar as capacidades agora.");
-  } finally {
-    if (button) {
-      button.disabled = false;
-      button.textContent = original;
-    }
   }
 }
 
@@ -5055,6 +5009,11 @@ function filteredWithPage(page, rows = state.data[page] || []) {
     if (filters.status) {
       const value = page === "sales" ? saleStatusLabel(item) : String(item.status || "");
       if (value !== filters.status) return false;
+    }
+    if (filters.capacityPresence) {
+      const hasCapacity = Number(item.capacity || 0) > 0;
+      if (filters.capacityPresence === "with" && !hasCapacity) return false;
+      if (filters.capacityPresence === "without" && hasCapacity) return false;
     }
     if (filters.type && String(item.type || item.materialType || "") !== filters.type) return false;
     if (filters.category && String(item.category || "") !== filters.category) return false;

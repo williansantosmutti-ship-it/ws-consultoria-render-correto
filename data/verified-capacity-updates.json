@@ -1,0 +1,497 @@
+[
+  {
+    "targetName": "Aguas de Jaguaribe",
+    "capacity": 170,
+    "sourceName": "CONDOMÍNIO AGUAS DE JAGUARIBE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 6, atualizado na fonte em 23/06/2026",
+    "evidence": "77 CONDOMÍNIO AGUAS DE JAGUARIBE residencial Ativo 170 — 23/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Art Residence",
+    "capacity": 172,
+    "sourceName": "ART RESIDENCE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 26, atualizado na fonte em 11/05/2026",
+    "evidence": "307 ART RESIDENCE residencial Apresentado 172 — 11/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Associacao de Moradores Five Streets",
+    "capacity": 100,
+    "sourceName": "CONDOMÍNIO ASSOCIACAO DE MORADORES FIVE STREETS",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 6, atualizado na fonte em 23/06/2026",
+    "evidence": "73 CONDOMÍNIO ASSOCIACAO DE MORADORES FIVE STREETS residencial Ativo 100 — 23/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Biarritz Patamares",
+    "capacity": 60,
+    "sourceName": "CONDOMÍNIO BIARRITZ PATAMARES",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 6, atualizado na fonte em 23/06/2026",
+    "evidence": "69 CONDOMÍNIO BIARRITZ PATAMARES residencial Apresentado 60 — 23/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Brisas de Jaguaribe Residence",
+    "capacity": 26,
+    "sourceName": "CONDOMINIO BRISAS DE JAGUARIBE RESIDENCE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 8, atualizado na fonte em 14/05/2026",
+    "evidence": "98 CONDOMINIO BRISAS DE JAGUARIBE RESIDENCE residencial Ativo 26 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Chacara Santo Expedito",
+    "capacity": 55,
+    "sourceName": "CONDOMÍNIO CHACARA SANTO EXPEDITO",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 5, atualizado na fonte em 23/06/2026",
+    "evidence": "56 CONDOMÍNIO CHACARA SANTO EXPEDITO residencial Ativo 55 — 23/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Colina C",
+    "capacity": 100,
+    "sourceName": "CONDOMÍNIO COLINA C",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 1, atualizado na fonte em 25/06/2026",
+    "evidence": "4 CONDOMÍNIO COLINA C residencial Apresentado 100 — 25/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Colina de Patamares Residence",
+    "capacity": 90,
+    "sourceName": "COLINA DE PATAMARES RESIDENCE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 31, atualizado na fonte em 11/05/2026",
+    "evidence": "378 COLINA DE PATAMARES RESIDENCE residencial Apresentado 90 — 11/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Colina e",
+    "capacity": 80,
+    "sourceName": "CONDOMÍNIO COLINA E",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 5, atualizado na fonte em 23/06/2026",
+    "evidence": "61 CONDOMÍNIO COLINA E residencial Apresentado 80 — 23/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Cond Edf JoÃ£o Alves",
+    "capacity": 22,
+    "sourceName": "CONDOMÍNIO EDF JOÃO ALVES",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 4, atualizado na fonte em 23/06/2026",
+    "evidence": "48 CONDOMÍNIO EDF JOÃO ALVES residencial Apresentado 22 — 23/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Cond Parque dos Lagos (Reserva Parque)",
+    "capacity": 16,
+    "sourceName": "CONDOMINIO PARQUE DOS LAGOS (reserva parque)",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 1, atualizado na fonte em 25/06/2026",
+    "evidence": "7 CONDOMINIO PARQUE DOS LAGOS (reserva parque) residencial Impossibilitado 16 — 25/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Cond Reservas do Picuaia",
+    "capacity": 200,
+    "sourceName": "RESIDENCIAL RESERVAS DO PICUAIA",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 12, atualizado na fonte em 14/05/2026",
+    "evidence": "148 RESIDENCIAL RESERVAS DO PICUAIA residencial Ativo 200 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Cond Vivendas do Miragem",
+    "capacity": 7,
+    "sourceName": "CONDOMINIO VIVENDAS DO MIRAGEM",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 16, atualizado na fonte em 13/05/2026",
+    "evidence": "192 CONDOMINIO VIVENDAS DO MIRAGEM residencial Ativo 7 — 13/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Condominio Parque Solar do AtlÃ¢ntico",
+    "capacity": 200,
+    "sourceName": "CONDOMINIO PARQUE SOLAR DO ATLANTICO",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 7, atualizado na fonte em 23/06/2026",
+    "evidence": "88 CONDOMINIO PARQUE SOLAR DO ATLANTICO residencial Ativo 200 — 23/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Condominio Smart Convencoes",
+    "capacity": 66,
+    "sourceName": "CONDOMINIO SMART CONVENCOES",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 12, atualizado na fonte em 14/05/2026",
+    "evidence": "145 CONDOMINIO SMART CONVENCOES residencial Ativo 66 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Condominio Villa Bella Residencial",
+    "capacity": 16,
+    "sourceName": "CONDOMINIO VILLA BELLA",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 12, atualizado na fonte em 14/05/2026",
+    "evidence": "144 CONDOMINIO VILLA BELLA RESIDENCIAL residencial Ativo 16 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Edificio Villa do Mar",
+    "capacity": 228,
+    "sourceName": "CONDOMINIO VILLA DO MAR",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 17, atualizado na fonte em 13/05/2026",
+    "evidence": "207 CONDOMINIO VILLA DO MAR residencial Ativo 228 — 13/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Etco Greenville",
+    "capacity": 306,
+    "sourceName": "ETCO GREENVILLE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 1, atualizado na fonte em 25/06/2026",
+    "evidence": "10 ETCO GREENVILLE residencial Apresentado 306 — 25/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Flamingos Paradise",
+    "capacity": 106,
+    "sourceName": "FLAMINGOS PARADISE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 22, atualizado na fonte em 12/05/2026",
+    "evidence": "266 FLAMINGOS PARADISE residencial Ativo 106 — 12/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Horto Vilas",
+    "capacity": 88,
+    "sourceName": "HORTO VILAS",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 26, atualizado na fonte em 11/05/2026",
+    "evidence": "312 HORTO VILAS residencial Ativo 88 — 11/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Jaguar Residence",
+    "capacity": 43,
+    "sourceName": "CONDOMINIO JAGUAR RESIDENCE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 10, atualizado na fonte em 14/05/2026",
+    "evidence": "125 CONDOMINIO JAGUAR RESIDENCE residencial Ativo 43 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Jardim Brasil",
+    "capacity": 50,
+    "sourceName": "CONDOMINIO JARDIM BRASIL",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 11, atualizado na fonte em 14/05/2026",
+    "evidence": "133 CONDOMINIO JARDIM BRASIL residencial Ativo 50 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Joanes Boulevard",
+    "capacity": 6,
+    "sourceName": "CONDOMÍNIO JOANES BOULEVARD",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 3, atualizado na fonte em 23/06/2026",
+    "evidence": "38 CONDOMÍNIO JOANES BOULEVARD residencial Impossibilitado 6 — 23/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Ludico",
+    "capacity": 354,
+    "sourceName": "LUDICO",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 1, atualizado na fonte em 25/06/2026",
+    "evidence": "9 LUDICO residencial Apresentado 354 — 25/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Mandala Vilas Residence",
+    "capacity": 148,
+    "sourceName": "CONDOMINIO MANDALA VILAS RESIDENCE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 14, atualizado na fonte em 14/05/2026",
+    "evidence": "170 CONDOMINIO MANDALA VILAS RESIDENCE residencial Ativo 148 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Mar Onda Morena",
+    "capacity": 10,
+    "sourceName": "CONDOMINIO MAR ONDA MORENA",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 11, atualizado na fonte em 14/05/2026",
+    "evidence": "134 CONDOMINIO MAR ONDA MORENA residencial Ativo 10 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Marambaia",
+    "capacity": 15,
+    "sourceName": "CONDOMINIO MARAMBAIA",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 17, atualizado na fonte em 13/05/2026",
+    "evidence": "210 CONDOMINIO MARAMBAIA RESIDENCIAL residencial Ativo 15 — 13/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Mares do Flamengo",
+    "capacity": 90,
+    "sourceName": "CONDOMÍNIO MARES DO FLAMENGO",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 3, atualizado na fonte em 23/06/2026",
+    "evidence": "35 CONDOMÍNIO MARES DO FLAMENGO residencial Ativo 90 — 23/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Morada Real Clube",
+    "capacity": 232,
+    "sourceName": "CONDOMÍNIO MORADA REAL CLUBE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 3, atualizado na fonte em 23/06/2026",
+    "evidence": "33 CONDOMÍNIO MORADA REAL CLUBE residencial Ativo 232 — 23/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Palazzo Savoia",
+    "capacity": 56,
+    "sourceName": "EDIFICIO PALAZZO SAVOIA",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 10, atualizado na fonte em 14/05/2026",
+    "evidence": "117 EDIFICIO PALAZZO SAVOIA residencial Ativo 56 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Palm Ville",
+    "capacity": 50,
+    "sourceName": "CONDOMINIO PALM VILLE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 18, atualizado na fonte em 13/05/2026",
+    "evidence": "211 CONDOMINIO PALM VILLE residencial Ativo 50 — 13/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "PiatÃ£ Ville",
+    "capacity": 100,
+    "sourceName": "COND PIATÃ VILLE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 25, atualizado na fonte em 12/05/2026",
+    "evidence": "295 COND PIATÃ VILLE residencial Ativo 100 — 12/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Porto Rio Mar",
+    "capacity": 45,
+    "sourceName": "CONDOMINIO PORTO RIO MAR",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 9, atualizado na fonte em 14/05/2026",
+    "evidence": "106 CONDOMINIO PORTO RIO MAR residencial Ativo 45 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Privilege Premium",
+    "capacity": 288,
+    "sourceName": "RESIDENCIAL PRIVILEGE PREMIUM",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 9, atualizado na fonte em 14/05/2026",
+    "evidence": "111 RESIDENCIAL PRIVILEGE PREMIUM residencial Ativo 288 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Quinta das Arvores",
+    "capacity": 160,
+    "sourceName": "CONDOMINIO QUINTA DAS ARVORES",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 16, atualizado na fonte em 13/05/2026",
+    "evidence": "187 CONDOMINIO QUINTA DAS ARVORES residencial Ativo 160 — 13/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Recanto de Abrantes",
+    "capacity": 150,
+    "sourceName": "RESIDENCIAL RECANTO DE ABRANTES",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 9, atualizado na fonte em 14/05/2026",
+    "evidence": "110 RESIDENCIAL RECANTO DE ABRANTES residencial Ativo 150 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Recanto Villas",
+    "capacity": 39,
+    "sourceName": "CONDOMINIO RECANTO VILLAS",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 13, atualizado na fonte em 14/05/2026",
+    "evidence": "157 CONDOMINIO RECANTO VILLAS residencial Ativo 39 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Reserva Parque",
+    "capacity": 340,
+    "sourceName": "RESERVA PARQUE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 20, atualizado na fonte em 12/05/2026",
+    "evidence": "242 RESERVA PARQUE residencial Ativo 340 — 12/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Reserva Praia de Buraquinho",
+    "capacity": 64,
+    "sourceName": "CONDOMINIO RESERVA PRAIA DE BURAQUINHO",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 14, atualizado na fonte em 13/05/2026",
+    "evidence": "174 CONDOMINIO RESERVA PRAIA DE BURAQUINHO residencial Ativo 64 — 13/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Residencial Genova",
+    "capacity": 300,
+    "sourceName": "RESIDENCIAL GENOVA",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 26, atualizado na fonte em 11/05/2026",
+    "evidence": "318 RESIDENCIAL GENOVA residencial Apresentado 300 — 11/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Residencial Recanto das Mangueiras",
+    "capacity": 119,
+    "sourceName": "COND RECANTO DAS MANGUEIRAS",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 30, atualizado na fonte em 11/05/2026",
+    "evidence": "365 COND RECANTO DAS MANGUEIRAS residencial Ativo 119 — 11/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Residencial Vistta Imperial",
+    "capacity": 40,
+    "sourceName": "RESIDENCIAL VISTTA IMPERIAL",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 9, atualizado na fonte em 14/05/2026",
+    "evidence": "112 RESIDENCIAL VISTTA IMPERIAL residencial Ativo 40 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Residencial Vivendas do Joanes",
+    "capacity": 173,
+    "sourceName": "CONDOMINIO VIVENDAS DO JOANES",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 7, atualizado na fonte em 23/06/2026",
+    "evidence": "89 CONDOMINIO VIVENDAS DO JOANES residencial Ativo 173 — 23/06/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Rio Tamisa",
+    "capacity": 48,
+    "sourceName": "EDIFICIO RIO TAMISA",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 10, atualizado na fonte em 14/05/2026",
+    "evidence": "121 EDIFICIO RIO TAMISA residencial Ativo 48 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Riviera Pracas Residenciais",
+    "capacity": 16,
+    "sourceName": "CONDOMINIO RIVIERA PRACAS RESIDENCIAIS",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 11, atualizado na fonte em 14/05/2026",
+    "evidence": "131 CONDOMINIO RIVIERA PRACAS RESIDENCIAIS residencial Ativo 16 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Sub Reserva das Arvores",
+    "capacity": 272,
+    "sourceName": "COND RESERVA DAS ARVORES",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 10, atualizado na fonte em 14/05/2026",
+    "evidence": "116 COND RESERVA DAS ARVORES residencial Ativo 272 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Subcond Village Praia de Buraquinho (Foz do Joanes)",
+    "capacity": 28,
+    "sourceName": "VILLAGE PRAIA DE BURAQUINHO (FOZ DO JOANES)",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 11, atualizado na fonte em 14/05/2026",
+    "evidence": "135 VILLAGE PRAIA DE BURAQUINHO (FOZ DO JOANES) residencial Ativo 28 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Terrazzi Sul Mare",
+    "capacity": 32,
+    "sourceName": "CONDOMINIO TERRAZZI SUL MARE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 9, atualizado na fonte em 14/05/2026",
+    "evidence": "114 CONDOMINIO TERRAZZI SUL MARE residencial Ativo 32 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Tk Tower",
+    "capacity": 178,
+    "sourceName": "CONDOMINIO TK TOWER",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 14, atualizado na fonte em 14/05/2026",
+    "evidence": "163 CONDOMINIO TK TOWER corporativo Ativo 178 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Verdes Mares",
+    "capacity": 16,
+    "sourceName": "CONDOMINIO EDIFICIO VERDES MARES",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 15, atualizado na fonte em 13/05/2026",
+    "evidence": "181 CONDOMINIO EDIFICIO VERDES MARES residencial Ativo 16 — 13/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Vila Harmonia",
+    "capacity": 4,
+    "sourceName": "CONDOMINIO VILA HARMONIA",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 8, atualizado na fonte em 14/05/2026",
+    "evidence": "101 CONDOMINIO VILA HARMONIA residencial Ativo 4 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Vila Morena Residencias",
+    "capacity": 52,
+    "sourceName": "CONDOMINIO VILA MORENA RESIDENCIAS",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 9, atualizado na fonte em 14/05/2026",
+    "evidence": "113 CONDOMINIO VILA MORENA RESIDENCIAS residencial Ativo 52 — 14/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Vila Siesta Ii",
+    "capacity": 7,
+    "sourceName": "CONDOMINIO VILA SIESTA II",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 15, atualizado na fonte em 13/05/2026",
+    "evidence": "184 CONDOMINIO VILA SIESTA II residencial Ativo 7 — 13/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Villa Maggiore",
+    "capacity": 30,
+    "sourceName": "RESIDENCIAL VILLA MAGGIORE",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 15, atualizado na fonte em 13/05/2026",
+    "evidence": "185 RESIDENCIAL VILLA MAGGIORE residencial Ativo 30 — 13/05/2026",
+    "confidence": "Alta"
+  },
+  {
+    "targetName": "Village PortÃ£o",
+    "capacity": 112,
+    "sourceName": "VILLAGE PORTÃO",
+    "sourceTitle": "Relatorio de Condominios - Use Telecom.pdf",
+    "sourceDetail": "pagina 1, atualizado na fonte em 25/06/2026",
+    "evidence": "1 VILLAGE PORTÃO residencial Apresentado 112 — 25/06/2026",
+    "confidence": "Alta"
+  }
+]

@@ -14,6 +14,7 @@ const DATA_DIR = process.env.DATA_DIR || process.env.RENDER_DISK_MOUNT_PATH || D
 const STORE_FILE = path.join(DATA_DIR, "store.json");
 const SEED_STORE_FILE = path.join(ROOT, "data", "store.json");
 const BACKUP_DIR = path.join(DATA_DIR, "backups");
+const VERIFIED_CAPACITY_UPDATES_FILE = path.join(ROOT, "data", "verified-capacity-updates.json");
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "williansantos.mutti@gmail.com";
 const INITIAL_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "8883e3d32b8ea89f7032952b323f6f67:90b10f284da16aa86abd7f59612fb357195f276b6310fd8850907d8b1ff3ffad";
 const ITERATIONS = 120000;
@@ -495,6 +496,53 @@ function normalizeTextKey(value) {
     .replace(/[^A-Z0-9]+/gi, " ")
     .trim()
     .toUpperCase();
+}
+
+function repairMojibake(value) {
+  const text = String(value || "");
+  if (!/[ÃÂ�]/.test(text)) return text;
+  try {
+    return Buffer.from(text, "latin1").toString("utf8");
+  } catch {
+    return text;
+  }
+}
+
+function capacitySeedKey(value) {
+  return normalizeTextKey(repairMojibake(value));
+}
+
+function applyVerifiedCapacityUpdates() {
+  if (!fs.existsSync(VERIFIED_CAPACITY_UPDATES_FILE)) return;
+  const db = ensureShape(readStore());
+  const updates = JSON.parse(fs.readFileSync(VERIFIED_CAPACITY_UPDATES_FILE, "utf8").replace(/^\uFEFF/, ""));
+  const byName = new Map();
+  for (const condo of db.condos || []) {
+    const key = capacitySeedKey(condo.name);
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(condo);
+  }
+  let applied = 0;
+  for (const update of Array.isArray(updates) ? updates : []) {
+    const condos = byName.get(capacitySeedKey(update.targetName)) || [];
+    if (!Number(update.capacity || 0)) continue;
+    for (const condo of condos) {
+      if (Number(condo.capacity || 0) > 0) continue;
+      condo.capacity = Number(update.capacity);
+      condo.capacityStatus = "Verificada";
+      condo.capacityConfidence = update.confidence || "Alta";
+      condo.capacitySourceTitle = update.sourceTitle || "Relatorio de Condominios - Use Telecom.pdf";
+      condo.capacityEvidence = [update.sourceName, update.sourceDetail, update.evidence].filter(Boolean).join(" | ");
+      condo.capacityCheckedAt = new Date().toISOString();
+      condo.updatedAt = condo.capacityCheckedAt;
+      applied += 1;
+    }
+  }
+  if (!applied) return;
+  db.settings.capacitySeedAppliedAt = new Date().toISOString();
+  db.settings.capacitySeedAppliedCount = Number(db.settings.capacitySeedAppliedCount || 0) + applied;
+  addActivity(db, { name: "Sistema" }, "Atualizou capacidade dos condomínios", `${applied} quantidade(s) preenchida(s) com fonte verificada`);
+  writeStore(db);
 }
 
 function sellerFirstKey(name) {
@@ -1299,6 +1347,7 @@ async function api(req, res) {
 }
 
 ensureStore();
+applyVerifiedCapacityUpdates();
 setInterval(() => {
   const now = Date.now();
   for (const [sid, session] of sessions) {

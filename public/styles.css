@@ -584,44 +584,6 @@ body[data-theme="dark"] .workspace { background: transparent; }
 .field-hint { color: var(--muted); font-weight: 600; }
 .table-wrap { overflow-x: auto; }
 td small { display: block; color: var(--muted); margin-top: 3px; }
-.capacity-research-card {
-  display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto auto;
-  gap: 16px;
-  align-items: center;
-  border-color: rgba(201, 162, 39, .34);
-  background:
-    linear-gradient(135deg, rgba(19, 37, 31, .06), transparent 36%),
-    linear-gradient(180deg, rgba(255,255,255,.98), rgba(250,248,243,.96));
-}
-.capacity-research-card h3 { margin: 2px 0 4px; font-size: 20px; }
-.capacity-research-card p { margin: 0; max-width: 760px; color: var(--muted); font-weight: 650; }
-.capacity-research-stats {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  min-width: 240px;
-}
-.capacity-research-stats span,
-.capacity-research-stats small {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 6px 10px;
-  border-radius: var(--radius);
-  background: rgba(238, 232, 217, .76);
-  color: var(--primary-dark);
-  font-weight: 800;
-}
-.capacity-research-stats small {
-  flex-basis: 100%;
-  justify-content: flex-end;
-  color: var(--muted);
-  font-size: 12px;
-  background: transparent;
-  padding: 0;
-}
 .capacity-cell {
   display: grid;
   gap: 2px;
@@ -1653,15 +1615,6 @@ body[data-theme="dark"] .filter-head {
 }
 body[data-theme="dark"] .filter-card.open .filter-head { background: linear-gradient(135deg, rgba(214, 173, 79, .08), rgba(255,255,255,.03)); }
 body[data-theme="dark"] .advanced-bar div { background: #202b35; }
-body[data-theme="dark"] .capacity-research-card {
-  background:
-    linear-gradient(135deg, rgba(214, 173, 79, .08), transparent 38%),
-    linear-gradient(180deg, #111923, #0f1720);
-}
-body[data-theme="dark"] .capacity-research-stats span {
-  background: #202b35;
-  color: var(--ink);
-}
 body[data-theme="dark"] .capacity-cell a { color: var(--accent); }
 body[data-theme="dark"] .donut::after { background: #111923; }
 body[data-theme="dark"] .alert { background: #1e1a10; border-color: #725c20; }
@@ -1854,17 +1807,6 @@ body[data-theme="dark"] .history-card.danger span { background: #3b1614; color: 
 
 @media (max-width: 900px) {
   .app { grid-template-columns: 1fr; }
-  .capacity-research-card {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-  }
-  .capacity-research-stats {
-    justify-content: flex-start;
-    min-width: 0;
-  }
-  .capacity-research-stats small {
-    justify-content: flex-start;
-  }
   .sidebar {
     position: sticky;
     top: 0;
