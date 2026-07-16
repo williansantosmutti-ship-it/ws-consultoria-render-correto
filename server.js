@@ -512,6 +512,12 @@ function capacitySeedKey(value) {
   return normalizeTextKey(repairMojibake(value));
 }
 
+function capacityNumber(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const match = String(value || "").replace(/\./g, "").match(/\b([1-9][0-9]{0,4})\b/);
+  return match ? Number(match[1]) : 0;
+}
+
 function applyVerifiedCapacityUpdates() {
   if (!fs.existsSync(VERIFIED_CAPACITY_UPDATES_FILE)) return;
   const db = ensureShape(readStore());
@@ -525,9 +531,9 @@ function applyVerifiedCapacityUpdates() {
   let applied = 0;
   for (const update of Array.isArray(updates) ? updates : []) {
     const condos = byName.get(capacitySeedKey(update.targetName)) || [];
-    if (!Number(update.capacity || 0)) continue;
+    if (!capacityNumber(update.capacity)) continue;
     for (const condo of condos) {
-      if (Number(condo.capacity || 0) > 0) continue;
+      if (capacityNumber(condo.capacity) > 0) continue;
       condo.capacity = Number(update.capacity);
       condo.capacityStatus = "Verificada";
       condo.capacityConfidence = update.confidence || "Alta";
